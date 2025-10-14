@@ -116,4 +116,28 @@ class ImageRefiner:
         if hasattr(self, 'pipe'):
             self.pipe.to('cpu')
             torch.cuda.empty_cache()
+    
+    def cleanup(self):
+        """
+        Fully cleanup and release all resources.
+        Use this when you're done with the refiner entirely.
+        """
+        if hasattr(self, 'pipe'):
+            # Move to CPU first
+            self.pipe.to('cpu')
+            # Delete the pipeline
+            del self.pipe
+            self.pipe = None
+        
+        # Clear CUDA cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    
+    def __del__(self):
+        """Destructor to ensure cleanup on deletion."""
+        try:
+            self.cleanup()
+        except Exception:
+            pass
 

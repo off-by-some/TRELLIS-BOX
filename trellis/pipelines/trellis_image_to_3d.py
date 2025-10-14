@@ -111,7 +111,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         else:
             # Remove background
             input = input.convert('RGB')
-            if getattr(self, 'rembg_session', None) is None:
+            if not hasattr(self, 'rembg_session') or self.rembg_session is None:
                 cache_dir = os.environ.get('U2NET_HOME', os.path.expanduser('~/.u2net'))
                 os.makedirs(cache_dir, exist_ok=True)
                 os.chmod(cache_dir, 0o755)
@@ -478,3 +478,22 @@ class TrellisImageTo3DPipeline(Pipeline):
         torch.cuda.synchronize()
         
         return self.decode_slat(slat, formats)
+    
+    def cleanup(self):
+        """
+        Cleanup resources to prevent memory leaks.
+        Call this periodically or when shutting down.
+        """
+        # Close rembg session if it exists
+        if hasattr(self, 'rembg_session') and self.rembg_session is not None:
+            try:
+                # rembg sessions don't have an explicit close, but we can delete the reference
+                del self.rembg_session
+                self.rembg_session = None
+            except Exception as e:
+                print(f"Error cleaning up rembg session: {e}")
+        
+        # Clear CUDA cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()

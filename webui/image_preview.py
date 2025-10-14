@@ -14,15 +14,31 @@ from io import BytesIO
 
 
 def _get_image_hash(image: Optional[Image.Image]) -> str:
-    """Generate a hash for an image to detect changes."""
+    """
+    Generate a hash for an image to detect changes.
+    Uses a memory-efficient approach by hashing image metadata and a sample.
+    """
     if image is None:
         return "none"
     
-    # Convert image to bytes and hash it
-    img_byte_arr = BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr = img_byte_arr.getvalue()
-    return hashlib.md5(img_byte_arr).hexdigest()
+    # Use object id and basic metadata instead of full image bytes
+    # This is much faster and uses far less memory
+    hash_str = f"{id(image)}_{image.size}_{image.mode}"
+    
+    # Add a small sample of pixel data for better detection
+    # Only sample a small region to minimize memory usage
+    # Sample 10x10 pixels from center
+    width, height = image.size
+    left = max(0, width // 2 - 5)
+    top = max(0, height // 2 - 5)
+    right = min(width, width // 2 + 5)
+    bottom = min(height, height // 2 + 5)
+    
+    sample = image.crop((left, top, right, bottom))
+    sample_bytes = sample.tobytes()
+    hash_str += f"_{hashlib.md5(sample_bytes).hexdigest()[:8]}"
+    
+    return hash_str
 
 
 def _create_placeholder_image(width: int = 400, height: int = 400) -> Image.Image:

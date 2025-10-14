@@ -47,9 +47,82 @@ TMP_DIR = os.environ.get("TRELLIS_OUTPUT_DIR", "/tmp/Trellis-demo")
 
 os.makedirs(TMP_DIR, exist_ok=True)
 
-# Global refiner instance (loaded lazily)
-refiner = None
 
+def cleanup_session_state(clear_all=False):
+    """
+    Clean up large objects from session state to prevent memory leaks.
+    
+    Args:
+        clear_all: If True, clear all generated content. If False, only clear old cached data.
+    """
+    if clear_all:
+        # Clear all generated content
+        keys_to_clear = [
+            'generated_video', 
+            'generated_glb', 
+            'generated_state',
+            'uploaded_image',
+            'processed_preview',
+            'processed_image'
+        ]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                st.session_state[key] = None
+    
+    # Always clean up image preview states that can accumulate
+    preview_keys = [k for k in st.session_state.keys() if k.startswith('_image_preview_')]
+    for key in preview_keys:
+        # Keep the state but don't let it accumulate too much
+        if isinstance(st.session_state[key], dict):
+            state = st.session_state[key]
+            # Reset render count periodically to prevent integer overflow
+            if state.get('render_count', 0) > 1000:
+                state['render_count'] = 0
+    
+    # Cleanup pipeline resources
+    if 'pipeline' in st.session_state and st.session_state.pipeline is not None:
+        try:
+            st.session_state.pipeline.cleanup()
+        except Exception as e:
+            print(f"Error during pipeline cleanup: {e}")
+    
+    # Cleanup refiner if loaded
+    if 'refiner' in st.session_state and st.session_state.refiner is not None:
+        try:
+            st.session_state.refiner.unload()
+        except Exception as e:
+            print(f"Error during refiner cleanup: {e}")
+    
+    # Force garbage collection and CUDA cleanup
+    reduce_memory_usage()
+
+
+def periodic_cleanup():
+    """
+    Perform periodic cleanup to prevent memory accumulation.
+    Should be called regularly (e.g., every few generations).
+    """
+    # Initialize cleanup counter if not exists
+    if 'cleanup_counter' not in st.session_state:
+        st.session_state.cleanup_counter = 0
+    
+    st.session_state.cleanup_counter += 1
+    
+    # Perform lightweight cleanup every 5 interactions
+    if st.session_state.cleanup_counter % 5 == 0:
+        cleanup_session_state(clear_all=False)
+    
+    # Perform more aggressive cleanup every 20 interactions
+    if st.session_state.cleanup_counter % 20 == 0:
+        print(f"Performing periodic cleanup (interaction #{st.session_state.cleanup_counter})")
+        
+        # Clear old temp files
+        from webui.initialize_pipeline import cleanup_temp_files
+        cleanup_temp_files(max_age_hours=1)
+        
+        # Reset counter to prevent overflow
+        if st.session_state.cleanup_counter > 1000:
+            st.session_state.cleanup_counter = 0
 
 def create_video_streaming(color_frames, normal_frames, output_path, fps=15, quality=8):
     """
@@ -94,18 +167,17 @@ def apply_image_refinement(image: Image.Image) -> Image.Image:
     Returns:
         Refined PIL Image
     """
-    global refiner
-    
-    # Load refiner if not already loaded
-    if refiner is None:
+    # Use session state instead of global variable for proper cleanup
+    if 'refiner' not in st.session_state or st.session_state.refiner is None:
         try:
             print("Loading Stable Diffusion XL Refiner...")
-            refiner = ImageRefiner(device="cuda", use_fp16=True)
+            st.session_state.refiner = ImageRefiner(device="cuda", use_fp16=True)
         except Exception as e:
             print(f"Failed to load refiner: {e}, skipping refinement")
             return image
 
     # Apply refinement
+    refiner = st.session_state.refiner
     if refiner is not None:
         try:
             refined_image = refiner.refine(
@@ -142,8 +214,8 @@ def preprocess_image(image: Image.Image, use_refinement: bool = False) -> Tuple[
         print("Applying image refinement...")
         image = apply_image_refinement(image)
         # Clean up refiner VRAM before TRELLIS processing
-        if refiner is not None:
-            refiner.unload()
+        if 'refiner' in st.session_state and st.session_state.refiner is not None:
+            st.session_state.refiner.unload()
         torch.cuda.empty_cache()
 
     # Memory-efficient preprocessing with no gradients
@@ -192,8 +264,8 @@ def preprocess_images(images: List[Image.Image], use_refinement: bool = False) -
         torch.cuda.empty_cache()
     
     # Clean up refiner after processing all images
-    if use_refinement and refiner is not None:
-        refiner.unload()
+    if use_refinement and 'refiner' in st.session_state and st.session_state.refiner is not None:
+        st.session_state.refiner.unload()
         torch.cuda.empty_cache()
 
     return trial_id, processed_images
@@ -502,6 +574,9 @@ def extract_glb(state: dict, mesh_simplify: float, texture_size: int) -> Tuple[s
 
 
 def main():
+    # Perform periodic cleanup to prevent memory leaks
+    periodic_cleanup()
+    
     st.title("Image to 3D Asset with TRELLIS")
     st.markdown("""
     * **Single Image**: Upload one image for standard 3D generation
@@ -550,14 +625,8 @@ def main():
                 show_clear=True,
                 show_info=True
             ):
-                # Clear action triggered - clean up CUDA memory
-                st.session_state.uploaded_image = None
-                st.session_state.processed_preview = None
-                st.session_state.generated_video = None
-                st.session_state.generated_glb = None
-                st.session_state.generated_state = None
-                # Force CUDA cleanup
-                reduce_memory_usage()
+                # Clear action triggered - clean up CUDA memory and session state
+                cleanup_session_state(clear_all=True)
                 st.rerun()
             
             # Handle uploaded image
@@ -571,8 +640,8 @@ def main():
                     st.session_state.generated_video = None
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
-                    # Force CUDA cleanup when switching images
-                    reduce_memory_usage()
+                    # Force cleanup when switching images
+                    cleanup_session_state(clear_all=False)
                     st.rerun()
 
             # Auto-remove background and show processed preview
@@ -590,6 +659,10 @@ def main():
                         show_clear=False,
                         show_info=True
                     )
+                    # Store preview but clean up old reference first to prevent accumulation
+                    if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
+                        old_preview = st.session_state.processed_preview
+                        del old_preview
                     st.session_state.processed_preview = processed_image
                 else:
                     st.info("Background removal preview will be shown after pipeline loads")
@@ -668,7 +741,7 @@ def main():
                 )
                 if clear_video == "clear":
                     st.session_state.generated_video = None
-                    reduce_memory_usage()
+                    cleanup_session_state(clear_all=False)
                     st.rerun()
             
             # Auto-extract GLB after video is shown
@@ -691,7 +764,7 @@ def main():
                 if clear_glb == "clear":
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
-                    reduce_memory_usage()
+                    cleanup_session_state(clear_all=False)
                     st.rerun()
 
                 # Download button
@@ -731,8 +804,8 @@ def main():
             st.session_state.generated_video = None
             st.session_state.generated_glb = None
             st.session_state.generated_state = None
-            # Force CUDA cleanup when loading example
-            reduce_memory_usage()
+            # Force cleanup when loading example
+            cleanup_session_state(clear_all=False)
             st.rerun()
         
     with tab2:
@@ -848,7 +921,7 @@ def main():
                 )
                 if clear_video == "clear":
                     st.session_state.generated_video = None
-                    reduce_memory_usage()
+                    cleanup_session_state(clear_all=False)
                     st.rerun()
 
             # 3D model viewer with clear button
@@ -863,7 +936,7 @@ def main():
                 if clear_glb == "clear":
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
-                    reduce_memory_usage()
+                    cleanup_session_state(clear_all=False)
                     st.rerun()
 
                 # Download button
