@@ -18,9 +18,10 @@ warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 os.environ['SPCONV_ALGO'] = 'native'
-# Memory optimizations for Trellis workloads - enable expandable segments to reduce fragmentation
-# This allows PyTorch to better manage memory allocation and reduce OOM errors
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True,max_split_size_mb:512,garbage_collection_threshold:0.8'
+# Memory optimizations for Trellis workloads
+# Use backend_alloc:cudaMallocAsync for better memory management with PyTorch 2.0+
+# Avoid expandable_segments due to compatibility issues with certain operations
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,garbage_collection_threshold:0.8,roundup_power2_divisions:16'
 # CUDA optimizations
 os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Non-blocking launches
 
@@ -97,6 +98,7 @@ class StateManager:
     GENERATED_GLB = 'generated_glb'
     GENERATED_STATE = 'generated_state'
     CLEANUP_COUNTER = 'cleanup_counter'
+    IS_GENERATING = 'is_generating'
     
     @staticmethod
     def initialize() -> None:
@@ -111,6 +113,7 @@ class StateManager:
             StateManager.GENERATED_GLB: None,
             StateManager.GENERATED_STATE: None,
             StateManager.CLEANUP_COUNTER: 0,
+            StateManager.IS_GENERATING: False,
         }
         
         for key, default_value in defaults.items():
@@ -200,6 +203,16 @@ class StateManager:
             counter = 0
         st.session_state[StateManager.CLEANUP_COUNTER] = counter
         return counter
+    
+    @staticmethod
+    def is_generating() -> bool:
+        """Check if a generation is currently in progress."""
+        return st.session_state.get(StateManager.IS_GENERATING, False)
+    
+    @staticmethod
+    def set_generating(generating: bool) -> None:
+        """Set the generation state."""
+        st.session_state[StateManager.IS_GENERATING] = generating
 
 
 # ============================================================================
@@ -917,37 +930,48 @@ class SingleImageUI:
                 texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
             
             # Generate button
-            if st.button("Generate 3D Model", type="primary", key="generate_single", use_container_width=True):
-                with st.spinner("Generating 3D model..."):
-                    # Use the auto-processed image from preview, or process it if preview failed
-                    if st.session_state.get('processed_preview') is not None:
-                        processed_image = st.session_state.processed_preview
-                        trial_id = str(uuid.uuid4())
-                        processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
-                    else:
-                        # Fallback: process the image normally
-                        trial_id, processed_image = ImageProcessor.preprocess_single_image(
-                            uploaded_image,
-                            use_refinement_single
+            is_generating = StateManager.is_generating()
+            if st.button("Generate 3D Model", type="primary", key="generate_single", use_container_width=True, disabled=is_generating):
+                try:
+                    StateManager.set_generating(True)
+                    with st.spinner("Generating 3D model..."):
+                        # Use the auto-processed image from preview, or process it if preview failed
+                        if st.session_state.get('processed_preview') is not None:
+                            processed_image = st.session_state.processed_preview
+                            trial_id = str(uuid.uuid4())
+                            processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
+                        else:
+                            # Fallback: process the image normally
+                            trial_id, processed_image = ImageProcessor.preprocess_single_image(
+                                uploaded_image,
+                                use_refinement_single
+                            )
+                        
+                        # Create generation parameters
+                        params = GenerationParams(
+                            seed=seed_single if not randomize_seed_single else np.random.randint(0, MAX_SEED),
+                            randomize_seed=randomize_seed_single,
+                            ss_guidance_strength=ss_guidance_strength_single,
+                            ss_sampling_steps=ss_sampling_steps_single,
+                            slat_guidance_strength=slat_guidance_strength_single,
+                            slat_sampling_steps=slat_sampling_steps_single
                         )
-                    
-                    # Create generation parameters
-                    params = GenerationParams(
-                        seed=seed_single if not randomize_seed_single else np.random.randint(0, MAX_SEED),
-                        randomize_seed=randomize_seed_single,
-                        ss_guidance_strength=ss_guidance_strength_single,
-                        ss_sampling_steps=ss_sampling_steps_single,
-                        slat_guidance_strength=slat_guidance_strength_single,
-                        slat_sampling_steps=slat_sampling_steps_single
-                    )
-                    
-                    # Generate 3D model
-                    state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
-                    
-                    StateManager.set_generated_video(video_path)
-                    StateManager.set_generated_state(state)
-                    st.session_state.processed_image = processed_image
-                    st.rerun()
+                        
+                        # Generate 3D model
+                        state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
+                        
+                        StateManager.set_generated_video(video_path)
+                        StateManager.set_generated_state(state)
+                        st.session_state.processed_image = processed_image
+                except Exception as e:
+                    st.error(f"❌ Generation failed: {str(e)}")
+                    st.warning("Try reducing image size or restarting the application if memory errors persist.")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
+                finally:
+                    StateManager.set_generating(False)
+                st.rerun()
         
         # Video preview
         with st.container():
@@ -1128,60 +1152,66 @@ class MultiImageUI:
             texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
         
         # Generate button
+        is_generating = StateManager.is_generating()
+        multi_disabled = len(multi_uploaded_files or []) < 2 or is_generating
         if st.button(
             "Generate 3D Model from Multiple Views",
             type="primary",
-            disabled=len(multi_uploaded_files or []) < 2,
+            disabled=multi_disabled,
             key="generate_multi"
         ):
             if multi_uploaded_files and len(multi_uploaded_files) >= 2:
-                with st.spinner("Processing multiple images..."):
-                    # Process uploaded images
-                    images = [Image.open(f) for f in multi_uploaded_files]
-                    
-                    # Apply refinement if requested
-                    if use_refinement_multi:
-                        st.info("Applying image refinement to all images...")
-                        images = [ImageProcessor.apply_refinement(img) for img in images]
-                    
-                    # Preprocess images
-                    trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
-                        images,
-                        use_refinement_multi
-                    )
-                    
-                    # Create generation parameters
-                    params = GenerationParams(
-                        seed=seed_multi if not randomize_seed_multi else np.random.randint(0, MAX_SEED),
-                        randomize_seed=randomize_seed_multi,
-                        ss_guidance_strength=ss_guidance_strength_multi,
-                        ss_sampling_steps=ss_sampling_steps_multi,
-                        slat_guidance_strength=slat_guidance_strength_multi,
-                        slat_sampling_steps=slat_sampling_steps_multi
-                    )
-                    
-                    # Generate 3D model from multiple images
-                    state, video_path = ModelGenerator.generate_from_multiple_images(
-                        trial_id,
-                        len(processed_images),
-                        batch_size_multi,
-                        params
-                    )
-                    
-                    StateManager.set_generated_video(video_path)
-                    StateManager.set_generated_state(state)
-                    
-                    st.success("Multi-view 3D model video generated! Extracting GLB...")
-                    
-                    # Auto-extract GLB after video generation
-                    export_params = ExportParams(
-                        mesh_simplify=mesh_simplify_multi,
-                        texture_size=texture_size_multi
-                    )
-                    glb_path, _ = GLBExporter.extract(state, export_params)
-                    StateManager.set_generated_glb(glb_path)
-                    st.success("✅ Multi-view 3D model complete!")
-                    st.rerun()
+                try:
+                    StateManager.set_generating(True)
+                    with st.spinner("Processing multiple images..."):
+                        # Process uploaded images
+                        images = [Image.open(f) for f in multi_uploaded_files]
+                        
+                        # Apply refinement if requested
+                        if use_refinement_multi:
+                            st.info("Applying image refinement to all images...")
+                            images = [ImageProcessor.apply_refinement(img) for img in images]
+                        
+                        # Preprocess images
+                        trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
+                            images,
+                            use_refinement_multi
+                        )
+                        
+                        # Create generation parameters
+                        params = GenerationParams(
+                            seed=seed_multi if not randomize_seed_multi else np.random.randint(0, MAX_SEED),
+                            randomize_seed=randomize_seed_multi,
+                            ss_guidance_strength=ss_guidance_strength_multi,
+                            ss_sampling_steps=ss_sampling_steps_multi,
+                            slat_guidance_strength=slat_guidance_strength_multi,
+                            slat_sampling_steps=slat_sampling_steps_multi
+                        )
+                        
+                        # Generate 3D model from multiple images
+                        state, video_path = ModelGenerator.generate_from_multiple_images(
+                            trial_id,
+                            len(processed_images),
+                            batch_size_multi,
+                            params
+                        )
+                        
+                        StateManager.set_generated_video(video_path)
+                        StateManager.set_generated_state(state)
+                        
+                        st.success("Multi-view 3D model video generated! Extracting GLB...")
+                        
+                        # Auto-extract GLB after video generation
+                        export_params = ExportParams(
+                            mesh_simplify=mesh_simplify_multi,
+                            texture_size=texture_size_multi
+                        )
+                        glb_path, _ = GLBExporter.extract(state, export_params)
+                        StateManager.set_generated_glb(glb_path)
+                        st.success("✅ Multi-view 3D model complete!")
+                finally:
+                    StateManager.set_generating(False)
+                st.rerun()
     
     @staticmethod
     def _render_output_column() -> None:

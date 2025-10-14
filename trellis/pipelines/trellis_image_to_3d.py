@@ -314,11 +314,20 @@ class TrellisImageTo3DPipeline(Pipeline):
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
             
-            # Print memory stats for debugging
+            # Aggressive memory cleanup before mesh decoding (most memory-intensive operation)
             if torch.cuda.is_available():
+                # Multiple cache clears to ensure memory is freed
+                for _ in range(3):
+                    torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                
+                # Print memory stats for debugging
                 allocated = torch.cuda.memory_allocated() / 1024**3
                 reserved = torch.cuda.memory_reserved() / 1024**3
                 print(f"Before mesh decode - Allocated: {allocated:.2f}GB, Reserved: {reserved:.2f}GB")
+            
+            # Force garbage collection before heavy operation
+            gc.collect()
             
             mesh = self.models['slat_decoder_mesh'](slat)
             outputs['mesh'] = self._convert_to_fp32(mesh)
