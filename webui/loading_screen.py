@@ -39,17 +39,13 @@ def show_loading_screen():
     .loading-container {
         position: relative;
         width: 100%;
-        min-height: 500px;
-        margin: 2rem 0;
+        margin: 2rem auto;
+        max-width: 1200px;
     }
     
     .glass-overlay {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 80%;
-        max-width: 800px;
+        position: relative;
+        width: 100%;
         padding: 3rem;
         background: rgba(102, 126, 234, 0.15);
         backdrop-filter: blur(20px);
@@ -57,10 +53,10 @@ def show_loading_screen():
         border-radius: 20px;
         border: 1px solid rgba(255, 255, 255, 0.2);
         box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-        z-index: 1000;
         text-align: center;
         transition: all 0.5s ease;
         cursor: pointer;
+        margin-bottom: 2rem;
     }
     
     .glass-overlay:hover {
