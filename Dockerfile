@@ -292,9 +292,10 @@ chmod -R 777 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DI
 chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
 
 # Ensure cache directories have proper permissions for downloads
-RUN mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} && \
-    chmod -R 755 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} && \
-    find ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} -type f -exec chmod 644 {} \; 2>/dev/null || true
+mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR}
+chmod -R 755 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR}
+find ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} -type f -exec chmod 644 {} \; 2>/dev/null || true
+EOF
 
 USER ${APP_USER}
 
