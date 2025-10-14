@@ -33,6 +33,10 @@ Then simply open http://localhost:8501 in your browser to access the web interfa
 
 ## Use Cases
 
+<p align="center">
+<img src="./docs/webui-screenshot.png" width="100%" height="600px" alt="TRELLIS Docker Banner">
+</p>
+
 ### Single Image to 3D Model
 Transform a single 2D image into a detailed 3D model. Perfect for product visualization, character design, or architectural concepts. The pipeline automatically removes backgrounds and generates textured meshes ready for 3D printing or game engines.
 
