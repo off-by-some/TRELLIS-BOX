@@ -53,11 +53,16 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         width: 100%;
         margin: 2rem auto;
         max-width: 1200px;
+        min-height: 400px;
     }}
     
     .glass-overlay {{
-        position: relative;
-        width: 100%;
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 840px;
         padding: 2rem;
         background: rgba(102, 126, 234, 0.15);
         backdrop-filter: blur(20px);
@@ -68,7 +73,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         text-align: center;
         transition: all 0.5s ease;
         cursor: pointer;
-        margin-bottom: 1.5rem;
+        z-index: 9999;
     }}
     
     .glass-overlay:hover {{
@@ -78,8 +83,8 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     }}
     
     .banner-image {{
-        max-width: 400px;
-        max-height: 400px;
+        max-width: 280px;
+        max-height: 280px;
         width: 100%;
         height: auto;
         margin: 0 auto 1rem auto;
