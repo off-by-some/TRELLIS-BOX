@@ -891,17 +891,16 @@ class SingleImageUI:
                 st.session_state.processed_preview = None
     
     @staticmethod
-    def _render_output_preview(video_key: str, glb_key: str, download_key: str, simplify_key: str, texture_key: str) -> None:
+    def _render_output_preview(video_key: str, glb_key: str, download_key: str, retry_key: str) -> None:
         """
-        Render output preview section (video + GLB viewer).
+        Render output preview section (video + GLB viewer + retry button).
         This is a shared component used by both single and multi-image tabs.
         
         Args:
             video_key: Unique key for video clear button
             glb_key: Unique key for GLB clear button
             download_key: Unique key for download button
-            simplify_key: Session state key for mesh simplify parameter
-            texture_key: Session state key for texture size parameter
+            retry_key: Unique key for retry button
         """
         # Video preview
         with st.container():
@@ -916,31 +915,16 @@ class SingleImageUI:
             )
             if clear_video == "clear":
                 StateManager.set_generated_video(None)
+                StateManager.set_generated_glb(None)
+                StateManager.set_generated_state(None)
                 MemoryManager.cleanup_session_state(clear_all=False)
                 st.rerun()
         
-        # Auto-extract GLB after video is shown
+        # 3D model viewer (shown after video or GLB is available)
         generated_video = StateManager.get_generated_video()
         generated_glb = StateManager.get_generated_glb()
         generated_state = StateManager.get_generated_state()
         
-        if generated_video and not generated_glb and generated_state:
-            with st.spinner("Extracting GLB..."):
-                # Get export parameters from session state
-                mesh_simplify = st.session_state.get(simplify_key, 0.95)
-                texture_size = st.session_state.get(texture_key, 1024)
-                
-                export_params = ExportParams(
-                    mesh_simplify=mesh_simplify,
-                    texture_size=texture_size
-                )
-                
-                glb_path, _ = GLBExporter.extract(generated_state, export_params)
-                StateManager.set_generated_glb(glb_path)
-                st.success("✅ 3D model complete!")
-                st.rerun()
-        
-        # 3D model viewer
         if generated_glb:
             st.success("✅ 3D Model Ready!")
             
@@ -965,9 +949,39 @@ class SingleImageUI:
                     type="primary",
                     key=download_key
                 )
+        elif generated_video and not generated_glb and generated_state:
+            # Auto-extract GLB in background
+            with st.spinner("Extracting GLB..."):
+                # Determine which tab we're in based on the video_key
+                if video_key == "single_video":
+                    mesh_simplify = st.session_state.get('simplify_single', 0.95)
+                    texture_size = st.session_state.get('texture_single', 1024)
+                else:  # multi_video
+                    mesh_simplify = st.session_state.get('simplify_multi', 0.95)
+                    texture_size = st.session_state.get('texture_multi', 1024)
+                
+                export_params = ExportParams(
+                    mesh_simplify=mesh_simplify,
+                    texture_size=texture_size
+                )
+                
+                glb_path, _ = GLBExporter.extract(generated_state, export_params)
+                StateManager.set_generated_glb(glb_path)
+                st.success("✅ 3D model complete!")
+                st.rerun()
         else:
             # Show placeholder when no GLB
             show_3d_model_viewer(None)
+        
+        # Retry button (shown when video is available)
+        if generated_video and not is_generating:
+            if st.button("🔄 Regenerate with Current Settings", type="secondary", key=retry_key, use_container_width=True):
+                # Clear existing outputs to trigger regeneration
+                StateManager.set_generated_video(None)
+                StateManager.set_generated_glb(None)
+                StateManager.set_generated_state(None)
+                st.info("Please click the Generate button again with your updated settings.")
+                st.rerun()
     
     @staticmethod
     def _render_output_column() -> None:
@@ -1062,8 +1076,7 @@ class SingleImageUI:
             video_key="single_video",
             glb_key="single_glb",
             download_key="download_single",
-            simplify_key="simplify_single",
-            texture_key="texture_single"
+            retry_key="retry_single"
         )
     
     @staticmethod
@@ -1260,8 +1273,7 @@ class MultiImageUI:
             video_key="multi_video",
             glb_key="multi_glb",
             download_key="download_multi",
-            simplify_key="simplify_multi",
-            texture_key="texture_multi"
+            retry_key="retry_multi"
         )
 
 
