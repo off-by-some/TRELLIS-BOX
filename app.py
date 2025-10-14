@@ -19,6 +19,7 @@ import tempfile
 from easydict import EasyDict as edict
 from PIL import Image
 from trellis.pipelines import TrellisImageTo3DPipeline
+from trellis.pipelines.image_refiner import ImageRefiner
 from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import render_utils, postprocessing_utils
 
@@ -26,6 +27,9 @@ MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = "/tmp/Trellis-demo"
 
 os.makedirs(TMP_DIR, exist_ok=True)
+
+# Global refiner instance (loaded lazily)
+refiner = None
 
 
 def defragment_memory():
@@ -177,7 +181,43 @@ def reduce_memory_usage():
     defragment_memory()
 
 
-def preprocess_image(image: Image.Image) -> Tuple[str, Image.Image]:
+def apply_image_refinement(image: Image.Image) -> Image.Image:
+    """
+    Apply Stable Diffusion XL refinement to improve input image quality.
+    Loads refiner lazily and unloads after use to conserve VRAM.
+    
+    Args:
+        image: Input PIL Image
+        
+    Returns:
+        Refined PIL Image
+    """
+    global refiner
+    
+    try:
+        # Load refiner if not already loaded
+        if refiner is None:
+            print("Loading Stable Diffusion XL Refiner...")
+            refiner = ImageRefiner(device="cuda", use_fp16=True)
+        
+        # Apply refinement
+        refined_image = refiner.refine(
+            image,
+            strength=0.3,  # Subtle refinement to preserve original
+            guidance_scale=7.5,
+            num_inference_steps=20,
+            prompt="high quality, detailed, sharp, clean",
+            negative_prompt="blurry, low quality, distorted, artifacts"
+        )
+        
+        return refined_image
+        
+    except Exception as e:
+        print(f"Refinement failed: {e}, using original image")
+        return image
+
+
+def preprocess_image(image: Image.Image, use_refinement: bool = False) -> Tuple[str, Image.Image]:
     """
     Preprocess the input image with memory-efficient operations.
 
@@ -189,6 +229,15 @@ def preprocess_image(image: Image.Image) -> Tuple[str, Image.Image]:
         Image.Image: The preprocessed image.
     """
     trial_id = str(uuid.uuid4())
+    
+    # Apply refinement if requested
+    if use_refinement:
+        print("Applying image refinement...")
+        image = apply_image_refinement(image)
+        # Clean up refiner VRAM before TRELLIS processing
+        if refiner is not None:
+            refiner.unload()
+        torch.cuda.empty_cache()
 
     # Memory-efficient preprocessing with no gradients
     with torch.no_grad():
@@ -202,7 +251,7 @@ def preprocess_image(image: Image.Image) -> Tuple[str, Image.Image]:
     return trial_id, processed_image
 
 
-def preprocess_images(images: List[Image.Image]) -> Tuple[str, List[Image.Image]]:
+def preprocess_images(images: List[Image.Image], use_refinement: bool = False) -> Tuple[str, List[Image.Image]]:
     """
     Preprocess multiple input images for multi-view 3D reconstruction.
     Memory optimization: Process and save images one by one to reduce peak memory usage.
@@ -219,6 +268,11 @@ def preprocess_images(images: List[Image.Image]) -> Tuple[str, List[Image.Image]
 
     # Process images one by one to minimize memory usage
     for i, img in enumerate(images):
+        # Apply refinement if requested
+        if use_refinement:
+            print(f"Refining image {i+1}/{len(images)}...")
+            img = apply_image_refinement(img)
+        
         processed_img = pipeline.preprocess_image(img)
         # High-quality image saving for multi-view - no compression artifacts
         processed_img.save(f"{TMP_DIR}/{trial_id}_{i}.png", quality=100, subsampling=0)
@@ -226,6 +280,11 @@ def preprocess_images(images: List[Image.Image]) -> Tuple[str, List[Image.Image]
 
         # Force cleanup of intermediate objects
         del img
+        torch.cuda.empty_cache()
+    
+    # Clean up refiner after processing all images
+    if use_refinement and refiner is not None:
+        refiner.unload()
         torch.cuda.empty_cache()
 
     return trial_id, processed_images
@@ -560,6 +619,11 @@ with gr.Blocks() as demo:
                     with gr.Accordion(label="Generation Settings", open=False):
                         seed_single = gr.Slider(0, MAX_SEED, label="Seed", value=0, step=1)
                         randomize_seed_single = gr.Checkbox(label="Randomize Seed", value=True)
+                        use_refinement_single = gr.Checkbox(
+                            label="Image Refinement (SD-XL)", 
+                            value=False,
+                            info="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)"
+                        )
                         gr.Markdown("Stage 1: Sparse Structure Generation")
                         with gr.Row():
                             ss_guidance_strength_single = gr.Slider(0.0, 10.0, label="Guidance Strength", value=7.5, step=0.1)
@@ -606,6 +670,11 @@ with gr.Blocks() as demo:
                     with gr.Accordion(label="Generation Settings", open=False):
                         seed_multi = gr.Slider(0, MAX_SEED, label="Seed", value=0, step=1)
                         randomize_seed_multi = gr.Checkbox(label="Randomize Seed", value=True)
+                        use_refinement_multi = gr.Checkbox(
+                            label="Image Refinement (SD-XL)", 
+                            value=False,
+                            info="Enhance input quality with Stable Diffusion XL (adds ~10s per image)"
+                        )
                         batch_size_multi = gr.Slider(1, 4, label="Batch Size", value=2, step=1, info="Number of images processed at once (lower = less memory)")
                         gr.Markdown("Stage 1: Sparse Structure Generation")
                         with gr.Row():
@@ -636,7 +705,7 @@ with gr.Blocks() as demo:
     # ===== Single Image Handlers =====
     image_prompt.upload(
         preprocess_image,
-        inputs=[image_prompt],
+        inputs=[image_prompt, use_refinement_single],
         outputs=[trial_id_single, image_prompt],
         api_name=False,
     )
@@ -669,7 +738,7 @@ with gr.Blocks() as demo:
     )
 
     # ===== Multi-Image Handlers =====
-    def process_multi_images(images):
+    def process_multi_images(images, use_refinement=False):
         if not images or len(images) < 2:
             return None, [], 0
 
@@ -681,12 +750,12 @@ with gr.Blocks() as demo:
 
         # Extract PIL images from gallery tuples (gallery returns list of tuples)
         pil_images = [img[0] if isinstance(img, tuple) else img for img in images]
-        trial_id, processed = preprocess_images(pil_images)
+        trial_id, processed = preprocess_images(pil_images, use_refinement=use_refinement)
         return trial_id, processed, len(processed)
     
     multi_image_prompt.upload(
         process_multi_images,
-        inputs=[multi_image_prompt],
+        inputs=[multi_image_prompt, use_refinement_multi],
         outputs=[trial_id_multi, multi_image_prompt, num_images_multi],
         api_name=False,
     )
