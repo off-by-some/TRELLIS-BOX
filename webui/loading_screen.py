@@ -31,10 +31,10 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     # Glassmorphic overlay banner with GPU info
     st.markdown(f"""
     <style>
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.8; }
-    }
+    @keyframes pulse {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.8; }}
+    }}
     
     .loading-container {
         position: relative;
