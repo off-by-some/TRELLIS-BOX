@@ -37,32 +37,10 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     /* Main container with flexbox layout */
     .main .block-container {
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100vh !important;
         padding: 1rem !important;
-    }
-    
-    /* First container - Terminal (grows to fill space) */
-    .main .block-container > div:nth-child(2) {
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        margin-bottom: 1rem;
-        background: #0d1117;
-        border-radius: 8px;
-        border: 1px solid #30363d;
-        overflow: hidden;
-    }
-    
-    /* Second container - Progress (stays at bottom) */
-    .main .block-container > div:nth-child(3) {
-        flex-shrink: 0;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     /* Terminal header bar */
@@ -94,19 +72,9 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .terminal-dot.yellow { background: #ffbd2e; }
     .terminal-dot.green { background: #27c93f; }
     
-    /* Terminal content - the streamlit empty element */
-    .main .block-container > div:nth-child(2) > div > div:last-child {
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        padding: 1rem;
-        min-height: 0;
-    }
-    
-    /* Style code blocks inside terminal */
-    .main .block-container > div:nth-child(2) pre {
-        flex: 1 1 auto;
+    /* Style code blocks inside terminal container */
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre {
+        flex: 1 1 auto !important;
         margin: 0 !important;
         padding: 1rem !important;
         background: #0d1117 !important;
@@ -120,26 +88,26 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         min-height: 0 !important;
     }
     
-    .main .block-container > div:nth-child(2) code {
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) code {
         color: #58a6ff !important;
         background: transparent !important;
     }
     
     /* Custom scrollbar for terminal */
-    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar {
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar {
         width: 8px;
     }
     
-    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-track {
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-track {
         background: #161b22;
     }
     
-    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb {
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-thumb {
         background: #30363d;
         border-radius: 4px;
     }
     
-    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb:hover {
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-thumb:hover {
         background: #484f58;
     }
     </style>
@@ -223,6 +191,38 @@ def show_loading_screen(gpu_info="Unknown GPU"):
             <strong>GPU:</strong> {gpu_info}
         </div>
     </div>
+    """, unsafe_allow_html=True)
+    
+    # Add custom styling to identify containers
+    st.markdown("""
+    <style>
+    /* Target all direct children of block-container for proper layout */
+    .main .block-container > .element-container {
+        display: contents;
+    }
+    
+    /* Terminal container styling */
+    div[data-testid="stVerticalBlock"]:has(.terminal-header) {
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 0 !important;
+        margin-bottom: 1rem !important;
+        background: #0d1117 !important;
+        border-radius: 8px !important;
+        border: 1px solid #30363d !important;
+        overflow: hidden !important;
+    }
+    
+    /* Progress container styling */
+    div[data-testid="stVerticalBlock"]:has(.stProgress) {
+        flex-shrink: 0 !important;
+        padding: 1rem !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+    </style>
     """, unsafe_allow_html=True)
     
     # Create containers for layout
