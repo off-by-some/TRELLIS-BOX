@@ -206,23 +206,8 @@ def capture_output(console_display):
                     # Join and display - newest lines are at the bottom
                     display_text = '\n'.join(display_lines)
                     
-                    # Display with terminal-like styling
-                    self.console_display.markdown(f"""
-                    <div style="
-                        background: #1a1a1a;
-                        color: #00ff00;
-                        padding: 1rem;
-                        border-radius: 8px;
-                        font-family: 'Courier New', monospace;
-                        font-size: 0.85rem;
-                        overflow-y: auto;
-                        max-height: 60vh;
-                        white-space: pre-wrap;
-                        word-wrap: break-word;
-                    ">
-                    <code>{display_text}</code>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Display with terminal-like styling using code block
+                    self.console_display.code(display_text, language='bash')
             
         def flush(self):
             self.original.flush()
