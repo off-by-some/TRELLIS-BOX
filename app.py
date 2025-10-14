@@ -1335,8 +1335,17 @@ class TrellisApp:
             progress_bar.progress(10)
 
             try:
-                with capture_output(console_output):
-                    pipeline = load_pipeline()
+                # First check if pipeline is already cached
+                from webui.initialize_pipeline import _PIPELINE_SINGLETON
+                
+                if _PIPELINE_SINGLETON is not None:
+                    # Pipeline already exists in cache, just use it
+                    print("Using cached pipeline from previous session")
+                    pipeline = _PIPELINE_SINGLETON
+                else:
+                    # Load new pipeline with output capture
+                    with capture_output(console_output):
+                        pipeline = load_pipeline()
 
                 StateManager.set_pipeline(pipeline)
 

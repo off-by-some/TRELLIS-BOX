@@ -99,6 +99,69 @@ def reduce_memory_usage():
     defragment_memory()
 
 
+def _load_pipeline_internal():
+    """
+    Internal function that actually loads the pipeline.
+    This is separated from the cached wrapper to avoid caching issues.
+    """
+    print("Loading TRELLIS pipeline...")
+    reduce_memory_usage()
+
+    pipeline = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
+    pipeline.cuda()
+    reduce_memory_usage()
+
+    # Set models to evaluation mode and convert to half precision where appropriate
+    for model_name, model in pipeline.models.items():
+        if hasattr(model, 'eval'):
+            model.eval()
+
+        if 'flow' in model_name or 'decoder' in model_name:
+            model.half()
+
+            # Keep norm layers in fp32 for numerical stability
+            from trellis.modules.norm import LayerNorm32, GroupNorm32, ChannelLayerNorm32
+            from trellis.modules.sparse.norm import SparseGroupNorm32, SparseLayerNorm32
+            from trellis.modules.attention.modules import MultiHeadRMSNorm
+            from trellis.modules.sparse.attention.modules import SparseMultiHeadRMSNorm
+            
+            for module in model.modules():
+                if isinstance(module, (LayerNorm32, GroupNorm32, ChannelLayerNorm32,
+                                     SparseGroupNorm32, SparseLayerNorm32,
+                                     MultiHeadRMSNorm, SparseMultiHeadRMSNorm)):
+                    module.float()
+
+    # Enable cuDNN and CUDA optimizations
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
+        # Enable gradient checkpointing for memory efficiency
+        for model in pipeline.models.values():
+            if hasattr(model, 'gradient_checkpointing_enable'):
+                model.gradient_checkpointing_enable()
+
+        # Additional optimizations
+        os.environ['CUDNN_CONVOLUTION_BWD_FILTER_ALGO'] = '1'
+        
+        if hasattr(torch.jit, 'enable_onednn_fusion'):
+            torch.jit.enable_onednn_fusion(True)
+
+        if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
+            os.environ['TORCH_USE_CUDA_DSA'] = '1'
+
+    print("TRELLIS pipeline loaded successfully")
+    print(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+    print(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+
+    reduce_memory_usage()
+    print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
+
+    return pipeline
+
+
 @st.cache_resource(show_spinner=False)
 def load_pipeline():
     """
@@ -124,61 +187,10 @@ def load_pipeline():
     
     try:
         _PIPELINE_LOAD_LOCK = True
-        print("Loading TRELLIS pipeline...")
-        reduce_memory_usage()
-
-        pipeline = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
-        pipeline.cuda()
-        reduce_memory_usage()
-
-        # Set models to evaluation mode and convert to half precision where appropriate
-        for model_name, model in pipeline.models.items():
-            if hasattr(model, 'eval'):
-                model.eval()
-
-            if 'flow' in model_name or 'decoder' in model_name:
-                model.half()
-
-                # Keep norm layers in fp32 for numerical stability
-                from trellis.modules.norm import LayerNorm32, GroupNorm32, ChannelLayerNorm32
-                from trellis.modules.sparse.norm import SparseGroupNorm32, SparseLayerNorm32
-                from trellis.modules.attention.modules import MultiHeadRMSNorm
-                from trellis.modules.sparse.attention.modules import SparseMultiHeadRMSNorm
-                
-                for module in model.modules():
-                    if isinstance(module, (LayerNorm32, GroupNorm32, ChannelLayerNorm32,
-                                         SparseGroupNorm32, SparseLayerNorm32,
-                                         MultiHeadRMSNorm, SparseMultiHeadRMSNorm)):
-                        module.float()
-
-        # Enable cuDNN and CUDA optimizations
-        if torch.cuda.is_available():
-            torch.backends.cudnn.benchmark = True
-            torch.backends.cudnn.enabled = True
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
-
-            # Enable gradient checkpointing for memory efficiency
-            for model in pipeline.models.values():
-                if hasattr(model, 'gradient_checkpointing_enable'):
-                    model.gradient_checkpointing_enable()
-
-            # Additional optimizations
-            os.environ['CUDNN_CONVOLUTION_BWD_FILTER_ALGO'] = '1'
-            
-            if hasattr(torch.jit, 'enable_onednn_fusion'):
-                torch.jit.enable_onednn_fusion(True)
-
-            if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
-                os.environ['TORCH_USE_CUDA_DSA'] = '1'
-
-        print("TRELLIS pipeline loaded successfully")
-        print(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-        print(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-
-        reduce_memory_usage()
-        print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
-
+        
+        # Load the pipeline
+        pipeline = _load_pipeline_internal()
+        
         # Store in singleton
         _PIPELINE_SINGLETON = pipeline
         return pipeline
