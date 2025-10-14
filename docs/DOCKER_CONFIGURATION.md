@@ -505,6 +505,58 @@ Edit Docker daemon config (`/etc/docker/daemon.json`):
 }
 ```
 
+### Issue: No CUDA Device Found
+
+**Problem**: Container shows "No CUDA runtime is found" or "no CUDA-capable device is detected"
+
+**Solution 1**: Verify NVIDIA Container Toolkit installation
+
+```bash
+# Check if NVIDIA Container Toolkit is installed
+docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
+
+# If that fails, install NVIDIA Container Toolkit
+# Ubuntu/Debian:
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+```
+
+**Solution 2**: Check GPU visibility on host
+
+```bash
+# Verify GPU is visible on host
+nvidia-smi
+
+# Check Docker can see GPUs
+docker run --rm --gpus all ubuntu nvidia-smi
+```
+
+**Solution 3**: For remote GPU machines (like via SSH)
+
+If running on a remote machine (like 10.0.0.217), ensure:
+
+1. SSH into the GPU machine: `ssh user@10.0.0.217`
+2. Run the Docker commands on the GPU machine directly
+3. Or set up Docker context for remote machine
+
+**Solution 4**: Environment-specific GPU access
+
+```bash
+# Force specific GPU
+CUDA_VISIBLE_DEVICES=0 ./scripts/run.sh
+
+# Or in .env file
+echo "CUDA_VISIBLE_DEVICES=0" >> .env
+
+# For multiple GPUs
+echo "CUDA_VISIBLE_DEVICES=0,1" >> .env
+```
+
 ## Advanced Configuration
 
 ### Custom Wheel Files
@@ -513,12 +565,20 @@ If you have custom `.whl` files, place them in the `wheels/` directory before bu
 
 ```bash
 ls wheels/
-# diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl
-# nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl
 # your-custom-package.whl
 
 ./scripts/build.sh
 ```
+
+**Note**: `diff_gaussian_rasterization` is always built from source for CUDA compatibility.
+
+**Note on Package Installation**: The Dockerfile handles package installation with intelligent fallbacks:
+
+- **flash-attention**: Tries wheel first, falls back to source build from PyPI
+- **diff-gaussian-rasterization**: Always built from [GitHub source](https://github.com/graphdeco-inria/differentiable-gaussian-rasterization) for CUDA compatibility
+- **nvdiffrast**: Always built from source in `extensions/` directory for CUDA compatibility
+
+This ensures maximum compatibility across different CUDA versions and hardware configurations.
 
 ### Modify Poetry Dependencies
 

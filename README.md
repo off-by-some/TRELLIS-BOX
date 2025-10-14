@@ -66,15 +66,38 @@ Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimi
 
 2. **Verify GPU access**:
    ```bash
-   docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+   # Quick test
+   docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
    ```
 
 ### Custom Build (Optional)
 For development or custom modifications, build from source:
 ```bash
-./trellis.sh build  # Build the Docker image
-./trellis.sh run    # Start the container
+./scripts/build.sh  # Build the Docker image
+./scripts/run.sh    # Start the container
 ```
+
+### Remote GPU Setup
+If running on a remote GPU machine (like via SSH), ensure proper GPU access:
+
+1. **SSH into your GPU machine:**
+   ```bash
+   ssh user@your-gpu-server-ip
+   ```
+
+2. **Verify GPU access:**
+   ```bash
+   ./scripts/check_gpu.sh
+   ```
+
+3. **Run TRELLIS:**
+   ```bash
+   ./scripts/run.sh
+   ```
+
+4. **Access the web interface:**
+   - Local: http://localhost:8501
+   - Remote: http://your-gpu-server-ip:8501 (ensure firewall allows port 8501)
 
 ### Publishing to Docker Hub
 To share your image on Docker Hub:

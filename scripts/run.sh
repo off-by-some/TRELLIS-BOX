@@ -169,6 +169,26 @@ build_image() {
     fi
 }
 
+# Function to check GPU access
+check_gpu_access() {
+    print_status "Checking GPU access..."
+
+    # Test if nvidia-docker is working
+    if docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+        print_success "GPU access confirmed"
+    else
+        print_warning "GPU access test failed. Checking NVIDIA Container Toolkit..."
+        if docker run --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+            print_warning "Basic NVIDIA runtime works, but --gpus flag may not be available"
+            print_warning "Try running: sudo apt-get install nvidia-docker2 && sudo systemctl restart docker"
+        else
+            print_error "NVIDIA Container Toolkit not properly installed"
+            print_error "Install NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+            exit 1
+        fi
+    fi
+}
+
 # Function to start the container
 start_container() {
     print_status "Starting TRELLIS container..."
@@ -180,8 +200,17 @@ start_container() {
     # Create host directories
     mkdir -p "$OUTPUTS_HOST_DIR"
 
-    # Start the container with same configuration as docker-compose.yml
-    docker run --gpus all \
+    # Start the container with GPU access
+    # Try multiple GPU access methods for compatibility
+    if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+        print_status "Using --gpus flag for GPU access"
+        GPU_FLAG="--gpus all"
+    else
+        print_warning "Falling back to --runtime=nvidia (older Docker setups)"
+        GPU_FLAG="--runtime=nvidia"
+    fi
+
+    docker run $GPU_FLAG \
         -it \
         --rm \
         -p "${HOST_PORT}:${APP_PORT}" \
@@ -204,7 +233,10 @@ main() {
     echo "🚀 TRELLIS Docker Launcher"
     echo "========================="
 
-    # Check GPU memory first
+    # Check GPU access first
+    check_gpu_access
+
+    # Check GPU memory
     check_gpu_memory
 
     # Stop any running container

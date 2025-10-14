@@ -105,13 +105,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Install flash-attention (try wheel first, fallback to source build)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir flash-attn || \
-    (echo "Flash attention wheel not available, attempting source build..." && \
-     pip install --no-cache-dir flash-attention)
+    if [ "${FORCE_BUILD_FLASH_ATTN:-false}" = "true" ]; then \
+        echo "Forcing flash-attention source build..."; \
+        pip install --no-cache-dir flash-attention; \
+    else \
+        pip install --no-cache-dir flash-attn || \
+        (echo "Flash attention wheel not available, attempting source build..." && \
+         pip install --no-cache-dir flash-attention); \
+    fi
 
-# Install custom wheels (diff_gaussian_rasterization, etc.)
+# Install diff-gaussian-rasterization from source (ensures CUDA compatibility)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir wheels/*.whl
+    echo "Building diff-gaussian-rasterization from source..."; \
+    pip install --no-cache-dir git+https://github.com/graphdeco-inria/differentiable-gaussian-rasterization.git
 
 # Build and install nvdiffrast from source (ensures CUDA compatibility)
 # Set TORCH_CUDA_ARCH_LIST to compile for common GPU architectures
