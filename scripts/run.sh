@@ -214,11 +214,17 @@ start_container() {
     print_status "GPU access: ${CUDA_VISIBLE_DEVICES:-all available}"
     print_status "================================"
 
-    # Create host directories
+    # Create host directories with proper permissions
     mkdir -p "$OUTPUTS_HOST_DIR"
     mkdir -p "$HOST_CACHE_DIR"
     mkdir -p "$HOST_HF_CACHE_DIR"
     mkdir -p "$HOST_REMBG_CACHE_DIR"
+    
+    # Set permissions to allow container to write (777 for maximum compatibility)
+    chmod -R 777 "$OUTPUTS_HOST_DIR" 2>/dev/null || true
+    chmod -R 777 "$HOST_CACHE_DIR" 2>/dev/null || true
+    chmod -R 777 "$HOST_HF_CACHE_DIR" 2>/dev/null || true
+    chmod -R 777 "$HOST_REMBG_CACHE_DIR" 2>/dev/null || true
 
     # Determine GPU access method
     if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
