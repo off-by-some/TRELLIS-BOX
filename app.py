@@ -856,6 +856,34 @@ if __name__ == "__main__":
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    
+    # Remove default Streamlit padding and margins
+    st.markdown("""
+        <style>
+        /* Remove top padding */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 0rem !important;
+        }
+        
+        /* Remove default header space */
+        header {
+            background-color: transparent !important;
+        }
+        
+        /* Reduce spacing between elements */
+        .element-container {
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Make the app use full viewport */
+        .main .block-container {
+            max-width: 100%;
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     # Simple GPU check
     if not torch.cuda.is_available():

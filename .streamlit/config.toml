@@ -9,8 +9,10 @@ gatherUsageStats = false
 serverAddress = "0.0.0.0"
 
 [theme]
+# Use base theme that respects user's browser theme preference
+base = "light"
 primaryColor = "#667eea"
-backgroundColor = "#ffffff"
+# backgroundColor will follow user's system theme
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
 font = "sans serif"
@@ -19,7 +21,6 @@ font = "sans serif"
 showErrorDetails = true
 toolbarMode = "minimal"
 
-# Custom app name and favicon
 [ui]
 hideTopBar = false
 hideSidebarNav = false
