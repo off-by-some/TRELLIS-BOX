@@ -43,8 +43,8 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         padding: 1rem !important;
     }
     
-    /* Terminal area wrapper - grows to fill space */
-    .terminal-wrapper {
+    /* First container - Terminal (grows to fill space) */
+    .main .block-container > div:nth-child(2) {
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
@@ -54,6 +54,15 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         border-radius: 8px;
         border: 1px solid #30363d;
         overflow: hidden;
+    }
+    
+    /* Second container - Progress (stays at bottom) */
+    .main .block-container > div:nth-child(3) {
+        flex-shrink: 0;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     /* Terminal header bar */
@@ -85,28 +94,21 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .terminal-dot.yellow { background: #ffbd2e; }
     .terminal-dot.green { background: #27c93f; }
     
-    /* Terminal content area */
-    .terminal-content {
+    /* Terminal content - the streamlit empty element */
+    .main .block-container > div:nth-child(2) > div > div:last-child {
         flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
         overflow-y: auto;
         padding: 1rem;
-        background: #0d1117;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    /* Style the streamlit element inside terminal */
-    .terminal-content > div {
-        flex: 1 1 auto;
-        display: flex;
-        flex-direction: column;
+        min-height: 0;
     }
     
     /* Style code blocks inside terminal */
-    .terminal-content pre {
+    .main .block-container > div:nth-child(2) pre {
         flex: 1 1 auto;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 1rem !important;
         background: #0d1117 !important;
         border: none !important;
         border-radius: 0 !important;
@@ -115,42 +117,30 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         line-height: 1.5 !important;
         color: #58a6ff !important;
         overflow-y: auto !important;
-        height: 100% !important;
+        min-height: 0 !important;
     }
     
-    .terminal-content code {
+    .main .block-container > div:nth-child(2) code {
         color: #58a6ff !important;
         background: transparent !important;
     }
     
-    .terminal-content::-webkit-scrollbar,
-    .terminal-content pre::-webkit-scrollbar {
+    /* Custom scrollbar for terminal */
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar {
         width: 8px;
     }
     
-    .terminal-content::-webkit-scrollbar-track,
-    .terminal-content pre::-webkit-scrollbar-track {
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-track {
         background: #161b22;
     }
     
-    .terminal-content::-webkit-scrollbar-thumb,
-    .terminal-content pre::-webkit-scrollbar-thumb {
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb {
         background: #30363d;
         border-radius: 4px;
     }
     
-    .terminal-content::-webkit-scrollbar-thumb:hover,
-    .terminal-content pre::-webkit-scrollbar-thumb:hover {
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb:hover {
         background: #484f58;
-    }
-    
-    /* Progress area stays at bottom */
-    .progress-wrapper {
-        flex-shrink: 0;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -235,9 +225,13 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     </div>
     """, unsafe_allow_html=True)
     
-    # Terminal output container (grows to fill space)
-    st.markdown("""
-    <div class="terminal-wrapper">
+    # Create containers for layout
+    terminal_container = st.container()
+    progress_container = st.container()
+    
+    # Terminal with header
+    with terminal_container:
+        st.markdown("""
         <div class="terminal-header">
             <div class="terminal-dots">
                 <div class="terminal-dot red"></div>
@@ -246,21 +240,13 @@ def show_loading_screen(gpu_info="Unknown GPU"):
             </div>
             <span>TRELLIS Pipeline Initialization</span>
         </div>
-        <div class="terminal-content">
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        console_output = st.empty()
     
-    console_output = st.empty()
-    
-    st.markdown("""
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Progress indicators at the bottom (fixed position)
-    st.markdown('<div class="progress-wrapper">', unsafe_allow_html=True)
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Progress indicators at the bottom
+    with progress_container:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
     
     start_time = time.time()
     return progress_bar, status_text, console_output, start_time
