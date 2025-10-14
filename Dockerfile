@@ -43,7 +43,7 @@ ARG STREAMLIT_SERVER_HEADLESS=true
 ARG CACHE_DIR=/home/appuser/.cache
 ARG HF_CACHE_DIR=/home/appuser/.cache/huggingface
 ARG REMBG_CACHE_DIR=/app/rembg_cache
-ARG TRELLIS_OUTPUT_DIR=/tmp/Trellis-demo
+ARG TRELLIS_OUTPUT_DIR=/app/outputs
 
 # =============================================================================
 # Builder Stage
