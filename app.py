@@ -898,15 +898,17 @@ class SingleImageUI:
         slat_steps_key: str,
         simplify_key: str,
         texture_key: str,
-        batch_size_key: str = None
+        batch_size_key: str = None,
+        trial_id: str = None
     ) -> None:
         """
         Render complete generation panel with settings, button, and output preview.
         This is a fully reusable component for both single and multi-image tabs.
-        
+
         Args:
             uploaded_data: Uploaded image or list of images
             is_multi_image: True for multi-image, False for single-image
+            trial_id: Unique identifier for this trial (used for UI keys)
             video_key: Unique key for video clear button
             glb_key: Unique key for GLB clear button
             download_key: Unique key for download button
@@ -922,6 +924,11 @@ class SingleImageUI:
             texture_key: Unique key for texture size slider
             batch_size_key: Unique key for batch size slider (multi-image only)
         """
+        # Generate trial_id if not provided
+        if trial_id is None:
+            import uuid
+            trial_id = str(uuid.uuid4())
+
         # Check if we have valid input
         has_input = False
         if is_multi_image:
@@ -1190,7 +1197,8 @@ class SingleImageUI:
             slat_strength_key="slat_strength_single",
             slat_steps_key="slat_steps_single",
             simplify_key="simplify_single",
-            texture_key="texture_single"
+            texture_key="texture_single",
+            trial_id="single"
         )
     
     @staticmethod
@@ -1311,7 +1319,8 @@ class MultiImageUI:
             slat_steps_key="slat_steps_multi",
             simplify_key="simplify_multi",
             texture_key="texture_multi",
-            batch_size_key="batch_size_multi"
+            batch_size_key="batch_size_multi",
+            trial_id="multi"
         )
 
 
