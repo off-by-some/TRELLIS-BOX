@@ -99,6 +99,7 @@ class StateManager:
     GENERATED_STATE = 'generated_state'
     CLEANUP_COUNTER = 'cleanup_counter'
     IS_GENERATING = 'is_generating'
+    VIDEO_SHOWN = 'video_shown'
     
     @staticmethod
     def initialize() -> None:
@@ -114,6 +115,7 @@ class StateManager:
             StateManager.GENERATED_STATE: None,
             StateManager.CLEANUP_COUNTER: 0,
             StateManager.IS_GENERATING: False,
+            StateManager.VIDEO_SHOWN: False,
         }
         
         for key, default_value in defaults.items():
@@ -1163,6 +1165,8 @@ class MultiImageUI:
             if multi_uploaded_files and len(multi_uploaded_files) >= 2:
                 try:
                     StateManager.set_generating(True)
+                    # Reset video shown flag for new generation
+                    st.session_state[StateManager.VIDEO_SHOWN] = False
                     with st.spinner("Processing multiple images..."):
                         # Process uploaded images
                         images = [Image.open(f) for f in multi_uploaded_files]
@@ -1230,7 +1234,12 @@ class MultiImageUI:
         generated_glb = StateManager.get_generated_glb()
         generated_state = StateManager.get_generated_state()
         
-        if generated_video and not generated_glb and generated_state:
+        # Mark video as shown if it's being displayed
+        if generated_video:
+            st.session_state[StateManager.VIDEO_SHOWN] = True
+        
+        # Only extract GLB if video has been shown at least once
+        if generated_video and not generated_glb and generated_state and st.session_state.get(StateManager.VIDEO_SHOWN, False):
             with st.spinner("Extracting GLB..."):
                 # Get export parameters from session state
                 mesh_simplify = st.session_state.get('simplify_multi', 0.95)
