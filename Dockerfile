@@ -10,9 +10,11 @@
 #     --build-arg CUDA_VERSION=12.2.0 \
 #     --build-arg PYTHON_VERSION=3.11 \
 #     --build-arg APP_PORT=8080 \
+#     --build-arg CACHE_DIR=/data/.cache \
 #     -t trellis-3d:latest .
 #
 # Or use docker-compose with build args in docker-compose.yml
+# See docker.env.example for all available configuration options
 # =============================================================================
 # CUDA and System
 ARG CUDA_VERSION=12.1.0
@@ -24,11 +26,18 @@ ARG PYTHON_VERSION=3.10
 ARG POETRY_VERSION=1.8.3
 ARG TORCH_VERSION=2.4.0
 ARG KAOLIN_VERSION=0.17.0
+ARG KAOLIN_INDEX_URL=https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
 # Application Configuration
 ARG APP_USER=appuser
 ARG APP_UID=1000
 ARG APP_PORT=8501
+
+# Cache Directories (inside container)
+ARG CACHE_DIR=/home/appuser/.cache
+ARG HF_CACHE_DIR=/home/appuser/.cache/huggingface
+ARG REMBG_CACHE_DIR=/home/appuser/.u2net
+ARG TRELLIS_OUTPUT_DIR=/tmp/Trellis-demo
 
 # =============================================================================
 # Builder Stage
@@ -45,6 +54,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 ARG PYTHON_VERSION
 ARG POETRY_VERSION
 ARG KAOLIN_VERSION
+ARG KAOLIN_INDEX_URL
 
 # Set working directory
 WORKDIR /app
@@ -73,11 +83,18 @@ RUN poetry config virtualenvs.create false && \
 COPY pyproject.toml poetry.lock* ./
 COPY wheels/ ./wheels/
 
-# Install Python dependencies with caching
+# Install application dependencies. We keep this separate from the other dependencies to 
+# avoid re-installing the same dependencies if wheels or kaolin fail to install.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --only main --no-interaction --no-ansi && \
-    pip install --no-cache-dir kaolin==${KAOLIN_VERSION} && \
+    poetry install --only main --no-interaction --no-ansi
+
+# Install Kaolin and wheels
+RUN --mount=type=cache,target=/root/.cache/pip \
+    --mount=type=cache,target=/root/.cache/pypoetry \
+    pip install --no-cache-dir \
+        --find-links ${KAOLIN_INDEX_URL} \
+        kaolin==${KAOLIN_VERSION} && \
     pip install --no-cache-dir wheels/*.whl
 
 # =============================================================================
@@ -90,13 +107,23 @@ ARG PYTHON_VERSION
 ARG APP_USER
 ARG APP_UID
 ARG APP_PORT
+ARG CACHE_DIR
+ARG HF_CACHE_DIR
+ARG REMBG_CACHE_DIR
+ARG TRELLIS_OUTPUT_DIR
 
 # Environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/usr/local/bin:$PATH" \
-    APP_PORT=${APP_PORT}
+    APP_PORT=${APP_PORT} \
+    CACHE_DIR=${CACHE_DIR} \
+    HF_HOME=${HF_CACHE_DIR} \
+    HUGGINGFACE_HUB_CACHE=${HF_CACHE_DIR} \
+    TRANSFORMERS_CACHE=${HF_CACHE_DIR} \
+    U2NET_HOME=${REMBG_CACHE_DIR} \
+    TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR}
 
 WORKDIR /app
 
@@ -122,7 +149,9 @@ COPY app.py ./
 
 # Create non-root user for security
 RUN useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER} && \
-    chown -R ${APP_USER}:${APP_USER} /app
+    chown -R ${APP_USER}:${APP_USER} /app && \
+    mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR} && \
+    chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
 
 USER ${APP_USER}
 

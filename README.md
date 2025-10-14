@@ -29,7 +29,7 @@ $ docker run --gpus all -it -p 7860:7860 \
               -v $(pwd)/outputs:/tmp/Trellis-demo \
             cassidybridges/trellis-box:latest
 ```
-Then simply open http://localhost:7860 in your browser to access the web interface.
+Then simply open http://localhost:7860 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations.
 
 ## Use Cases
 
@@ -128,6 +128,21 @@ Upload one image to generate a 3D model. Background removal is applied automatic
 Upload 2-4 images from different angles. The pipeline cycles through images during sampling for improved conditioning.
 
 ## Configuration
+
+### Configuration
+The Docker image is fully configurable via build arguments and environment variables. You can customize:
+
+Quick start with custom configuration:
+```bash
+# Copy the example configuration
+cp docker.env.example .env
+
+# Edit to your preferences
+nano .env
+
+# Build and run with your configuration
+docker-compose up --build
+```
 
 ### Environment Variables
 ```bash

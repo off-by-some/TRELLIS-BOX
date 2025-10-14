@@ -13,22 +13,27 @@ services:
         PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
         POETRY_VERSION: ${POETRY_VERSION:-1.8.3}
         KAOLIN_VERSION: ${KAOLIN_VERSION:-0.17.0}
+        KAOLIN_INDEX_URL: ${KAOLIN_INDEX_URL:-https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html}
         APP_USER: ${APP_USER:-appuser}
         APP_UID: ${APP_UID:-1000}
         APP_PORT: ${APP_PORT:-8501}
+        CACHE_DIR: ${CACHE_DIR:-/home/appuser/.cache}
+        HF_CACHE_DIR: ${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+        REMBG_CACHE_DIR: ${REMBG_CACHE_DIR:-/home/appuser/.u2net}
+        TRELLIS_OUTPUT_DIR: ${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
     image: trellis-box:latest
     container_name: trellis-box
     ports:
       - "${HOST_PORT:-8501}:${APP_PORT:-8501}"
     volumes:
-      # Persist model cache between runs (using non-root user home)
-      - trellis-cache:/home/${APP_USER:-appuser}/.cache
+      # Persist model cache between runs
+      - ${CACHE_VOLUME:-trellis-cache}:${CACHE_DIR:-/home/appuser/.cache}
       # Persist Hugging Face cache
-      - huggingface-cache:/home/${APP_USER:-appuser}/.cache/huggingface
+      - ${HF_CACHE_VOLUME:-huggingface-cache}:${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
       # Persist rembg model cache
-      - rembg-cache:/home/${APP_USER:-appuser}/.u2net
-      # Persist generated outputs
-      - ./outputs:/tmp/Trellis-demo
+      - ${REMBG_CACHE_VOLUME:-rembg-cache}:${REMBG_CACHE_DIR:-/home/appuser/.u2net}
+      # Persist generated outputs (bind mount to local directory)
+      - ${OUTPUTS_HOST_DIR:-./outputs}:${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
     environment:
       # Optional: Add any runtime environment variables here
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
