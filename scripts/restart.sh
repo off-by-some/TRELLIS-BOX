@@ -1,5 +1,18 @@
 #!/bin/bash
 
+# =============================================================================
+# Configuration - Matches docker-compose.yml and other scripts
+# =============================================================================
+# Load .env file if it exists
+if [ -f ".env" ]; then
+    set -a  # Export all variables
+    source .env
+    set +a
+fi
+
+# Default values (matches docker-compose.yml defaults)
+HOST_PORT=${HOST_PORT:-8501}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -27,7 +40,7 @@ fi
 
 # Check if container is already running
 if docker ps --filter "name=trellis-box" --filter "status=running" | grep -q trellis-box; then
-    print_status "TRELLIS container is already running at http://localhost:7860"
+    print_status "TRELLIS container is already running at http://localhost:${HOST_PORT}"
     exit 0
 fi
 

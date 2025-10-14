@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# =============================================================================
+# Configuration - Matches docker-compose.yml and other scripts
+# =============================================================================
+# Load .env file if it exists
+if [ -f ".env" ]; then
+    set -a  # Export all variables
+    source .env
+    set +a
+fi
+
+# Default values (matches docker-compose.yml defaults)
+APP_PORT=${APP_PORT:-8501}
+HOST_PORT=${HOST_PORT:-8501}
+OUTPUTS_HOST_DIR=${OUTPUTS_HOST_DIR:-./outputs}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -37,7 +52,7 @@ fi
 if docker ps -a --filter "name=trellis-box" | grep -q trellis-box; then
     if docker ps --filter "name=trellis-box" --filter "status=running" | grep -q trellis-box; then
         print_success "TRELLIS container is RUNNING"
-        echo "  🌐 Web interface: http://localhost:7860"
+        echo "  🌐 Web interface: http://localhost:${HOST_PORT}"
         echo "  🐳 Container name: trellis-box"
     else
         print_warning "TRELLIS container exists but is STOPPED"
@@ -76,29 +91,31 @@ fi
 
 echo ""
 
-# TRELLIS cache directory check
-if [ -d ~/.cache/trellis-box ]; then
-    local cache_size=$(du -sh ~/.cache/trellis-box 2>/dev/null | cut -f1)
-    print_success "TRELLIS cache: ~/.cache/trellis-box (${cache_size})"
+# Cache volumes check (Docker named volumes)
+if docker volume ls --format "table {{.Name}}" | grep -q trellis-cache; then
+    print_success "TRELLIS cache volume exists (Docker named volume)"
 else
-    print_status "TRELLIS cache directory not created yet"
+    print_status "TRELLIS cache volume not created yet"
 fi
 
-# rembg cache directory check
-if [ -d ~/.cache/rembg ]; then
-    local rembg_size=$(du -sh ~/.cache/rembg 2>/dev/null | cut -f1)
-    local rembg_files=$(find ~/.cache/rembg -type f | wc -l)
-    print_success "rembg cache: ~/.cache/rembg (${rembg_size}, ${rembg_files} files)"
+if docker volume ls --format "table {{.Name}}" | grep -q huggingface-cache; then
+    print_success "Hugging Face cache volume exists (Docker named volume)"
 else
-    print_status "rembg cache directory not created yet"
+    print_status "Hugging Face cache volume not created yet"
+fi
+
+if docker volume ls --format "table {{.Name}}" | grep -q rembg-cache; then
+    print_success "rembg cache volume exists (Docker named volume)"
+else
+    print_status "rembg cache volume not created yet"
 fi
 
 echo ""
 
 # Outputs directory check
-if [ -d "./outputs" ]; then
-    local output_count=$(find ./outputs -type f | wc -l)
-    print_success "Outputs directory exists with ${output_count} files"
+if [ -d "$OUTPUTS_HOST_DIR" ]; then
+    local output_count=$(find "$OUTPUTS_HOST_DIR" -type f | wc -l)
+    print_success "Outputs directory exists: $OUTPUTS_HOST_DIR (${output_count} files)"
 else
-    print_status "Outputs directory not created yet"
+    print_status "Outputs directory not created yet: $OUTPUTS_HOST_DIR"
 fi

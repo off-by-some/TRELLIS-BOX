@@ -3,6 +3,36 @@
 set -e  # Exit on any error
 export DOCKER_BUILDKIT=1
 
+# =============================================================================
+# Configuration - Matches docker-compose.yml and Dockerfile
+# =============================================================================
+# Load .env file if it exists
+if [ -f ".env" ]; then
+    set -a  # Export all variables
+    source .env
+    set +a
+fi
+
+# Default values (matches docker-compose.yml defaults)
+CUDA_VERSION=${CUDA_VERSION:-12.3.2}
+PYTHON_VERSION=${PYTHON_VERSION:-3.10}
+APP_PORT=${APP_PORT:-8501}
+HOST_PORT=${HOST_PORT:-8501}
+APP_USER=${APP_USER:-appuser}
+APP_UID=${APP_UID:-1000}
+CACHE_DIR=${CACHE_DIR:-/home/appuser/.cache}
+HF_CACHE_DIR=${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+REMBG_CACHE_DIR=${REMBG_CACHE_DIR:-/home/appuser/.u2net}
+TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
+OUTPUTS_HOST_DIR=${OUTPUTS_HOST_DIR:-./outputs}
+CACHE_VOLUME=${CACHE_VOLUME:-trellis-cache}
+HF_CACHE_VOLUME=${HF_CACHE_VOLUME:-huggingface-cache}
+REMBG_CACHE_VOLUME=${REMBG_CACHE_VOLUME:-rembg-cache}
+
+# Streamlit configuration
+STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
+STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -142,20 +172,31 @@ build_image() {
 # Function to start the container
 start_container() {
     print_status "Starting TRELLIS container..."
+    print_status "Image: trellis-box:latest"
+    print_status "Port: ${HOST_PORT} -> ${APP_PORT}"
+    print_status "GPU Memory: ${CUDA_VISIBLE_DEVICES:-all}"
+    print_status "================================"
 
-    # Create persistent cache directories
-    mkdir -p ~/.cache/trellis-box
-    mkdir -p ~/.cache/rembg
+    # Create host directories
+    mkdir -p "$OUTPUTS_HOST_DIR"
 
-    # Start the container
+    # Start the container with same configuration as docker-compose.yml
     docker run --gpus all \
         -it \
-        -p 7860:7860 \
+        --rm \
+        -p "${HOST_PORT}:${APP_PORT}" \
         --name trellis-box \
-        -v ~/.cache/trellis-box:/root/.cache \
-        -v ~/.cache/rembg:/root/.u2net \
-        -v $(pwd)/outputs:/tmp/Trellis-demo \
+        -v "${CACHE_VOLUME}:${CACHE_DIR}" \
+        -v "${HF_CACHE_VOLUME}:${HF_CACHE_DIR}" \
+        -v "${REMBG_CACHE_VOLUME}:${REMBG_CACHE_DIR}" \
+        -v "$(pwd)/${OUTPUTS_HOST_DIR}:${TRELLIS_OUTPUT_DIR}" \
+        -e CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-all}" \
+        -e STREAMLIT_SERVER_PORT="${APP_PORT}" \
+        -e STREAMLIT_SERVER_ADDRESS="${STREAMLIT_SERVER_ADDRESS}" \
+        -e STREAMLIT_SERVER_HEADLESS="${STREAMLIT_SERVER_HEADLESS}" \
         trellis-box
+
+    print_success "Container stopped"
 }
 
 # Main execution
