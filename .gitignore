@@ -163,3 +163,7 @@ outputs/
 ckpts/
 *.safetensor
 *.safetensors
+
+# Wheels - only keep valid wheel files, not Git LFS pointers
+# We build nvdiffrast from source in extensions/
+# Only include actual .whl files (not LFS pointers)

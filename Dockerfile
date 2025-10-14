@@ -11,7 +11,7 @@
 #     --build-arg PYTHON_VERSION=3.11 \
 #     --build-arg APP_PORT=8080 \
 #     --build-arg CACHE_DIR=/data/.cache \
-#     -t trellis-3d:latest .
+#     -t trellis-box:latest .
 #
 # Or use docker-compose with build args in docker-compose.yml
 # See docker.env.example for all available configuration options
@@ -82,6 +82,7 @@ RUN poetry config virtualenvs.create false && \
 # Copy dependency files (including poetry.lock if it exists)
 COPY pyproject.toml poetry.lock* ./
 COPY wheels/ ./wheels/
+COPY extensions/ ./extensions/
 
 # Install application dependencies. We keep this separate from the other dependencies to 
 # avoid re-installing the same dependencies if wheels or kaolin fail to install.
@@ -89,13 +90,20 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cache/pypoetry \
     poetry install --only main --no-interaction --no-ansi
 
-# Install Kaolin and wheels
+# Install Kaolin from NVIDIA's repository
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/pypoetry \
     pip install --no-cache-dir \
         --find-links ${KAOLIN_INDEX_URL} \
-        kaolin==${KAOLIN_VERSION} && \
+        kaolin==${KAOLIN_VERSION}
+
+# Install custom wheels (diff_gaussian_rasterization, etc.)
+RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir wheels/*.whl
+
+# Build and install nvdiffrast from source (ensures CUDA compatibility)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    cd extensions/nvdiffrast && \
+    pip install --no-cache-dir .
 
 # =============================================================================
 # Runtime Stage
