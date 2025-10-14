@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*rename
 warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 
-def show_loading_screen():
+def show_loading_screen(gpu_info="Unknown GPU"):
     """Display the loading screen while initializing TRELLIS pipeline."""
     # Hide default streamlit elements for cleaner loading screen
     st.markdown("""
@@ -28,8 +28,8 @@ def show_loading_screen():
     # Console output container (behind the glass overlay)
     console_output = st.empty()
     
-    # Glassmorphic overlay banner
-    st.markdown("""
+    # Glassmorphic overlay banner with GPU info
+    st.markdown(f"""
     <style>
     @keyframes pulse {
         0%, 100% { opacity: 1; }
@@ -93,12 +93,20 @@ def show_loading_screen():
         margin: 1rem 0;
     }
     
-    .hint-text {
-        font-size: 0.9rem;
-        color: #666;
-        margin-top: 2rem;
-        font-style: italic;
+    .gpu-info {
+        font-size: 1rem;
+        color: #4a5568;
+        margin-top: 1.5rem;
+        padding: 0.75rem 1.5rem;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        display: inline-block;
+        font-weight: 500;
     }
+    
+    .gpu-info strong {{
+        color: #667eea;
+    }}
     </style>
     
     <div class="loading-container">
@@ -110,6 +118,9 @@ def show_loading_screen():
                 <strong>First run may take 2-5 minutes</strong>
             </p>
             <div class="loading-icon">⏳</div>
+            <div class="gpu-info">
+                <strong>🎮 GPU:</strong> {gpu_info}
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)

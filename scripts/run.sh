@@ -215,16 +215,20 @@ start_container() {
     print_status "================================"
 
     # Create host directories with proper permissions
+    print_status "Creating and configuring host directories..."
     mkdir -p "$OUTPUTS_HOST_DIR"
     mkdir -p "$HOST_CACHE_DIR"
     mkdir -p "$HOST_HF_CACHE_DIR"
     mkdir -p "$HOST_REMBG_CACHE_DIR"
     
     # Set permissions to allow container to write (777 for maximum compatibility)
-    chmod -R 777 "$OUTPUTS_HOST_DIR" 2>/dev/null || true
-    chmod -R 777 "$HOST_CACHE_DIR" 2>/dev/null || true
-    chmod -R 777 "$HOST_HF_CACHE_DIR" 2>/dev/null || true
-    chmod -R 777 "$HOST_REMBG_CACHE_DIR" 2>/dev/null || true
+    print_status "Setting directory permissions (777 for container write access)..."
+    chmod 777 "$OUTPUTS_HOST_DIR" 2>/dev/null || print_warning "Could not set permissions on $OUTPUTS_HOST_DIR"
+    chmod 777 "$HOST_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_CACHE_DIR"
+    chmod 777 "$HOST_HF_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_HF_CACHE_DIR"
+    chmod 777 "$HOST_REMBG_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_REMBG_CACHE_DIR"
+    
+    print_status "Directory permissions configured"
 
     # Determine GPU access method
     if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then

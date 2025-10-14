@@ -867,21 +867,21 @@ if __name__ == "__main__":
         st.code("• Run: nvidia-smi (on host) to verify GPU")
         st.stop()
 
-    # Show CUDA info
+    # Get GPU info
     gpu_count = torch.cuda.device_count()
     if gpu_count > 0:
         current_device = torch.cuda.current_device()
         gpu_name = torch.cuda.get_device_name(current_device)
-        st.success(f"CUDA GPU available: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
+        gpu_info = f"{gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})"
     else:
         st.error("CUDA available but no GPUs accessible")
         st.stop()
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
-        # Show loading screen with console output
+        # Show loading screen with console output and GPU info
         from webui.loading_screen import capture_output
-        progress_bar, status_text, console_output, start_time = show_loading_screen()
+        progress_bar, status_text, console_output, start_time = show_loading_screen(gpu_info)
 
         # Load the pipeline with captured output
         status_text.text("Loading TRELLIS pipeline...")

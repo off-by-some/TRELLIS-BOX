@@ -287,15 +287,17 @@ EOF
 RUN <<EOF
 set -e
 useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER}
-chown -R ${APP_USER}:${APP_USER} /app
-mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
-chmod -R 777 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
-chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR} /app
 
-# Ensure cache directories have proper permissions for downloads
-mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR}
-chmod -R 755 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR}
-find ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} -type f -exec chmod 644 {} \; 2>/dev/null || true
+# Create cache and output directories with proper ownership from the start
+mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chmod -R 777 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+
+# Set ownership of /app after creating directories
+chown -R ${APP_USER}:${APP_USER} /app
+
+# Ensure directories remain writable even after volume mounts
+chmod 777 ${TRELLIS_OUTPUT_DIR}
 EOF
 
 USER ${APP_USER}
