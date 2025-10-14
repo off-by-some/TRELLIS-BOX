@@ -5,7 +5,8 @@ import os
 import warnings
 from webui.loading_screen import show_loading_screen, finalize_loading
 from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
-from webui.ui_components import show_image_preview, show_video_preview, show_3d_model_viewer, show_example_gallery
+from webui.ui_components import show_video_preview, show_3d_model_viewer, show_example_gallery
+from webui.image_preview import image_preview
 import base64
 
 # Suppress common warnings for cleaner output
@@ -540,16 +541,15 @@ def main():
                 label_visibility="visible"
             )
             
-            # Show original image with clear button
-            clear_action = show_image_preview(
-                st.session_state.uploaded_image, 
-                "📷 Original Image",
+            # Show original image with clear button using new reactive component
+            if image_preview(
+                st.session_state.uploaded_image,
+                component_id="single_original",
+                title="📷 Original Image",
                 show_clear=True,
-                clear_key="single_original"
-            )
-            
-            # Handle clear action first before updating from uploader
-            if clear_action == "clear":
+                show_info=True
+            ):
+                # Clear action triggered
                 st.session_state.uploaded_image = None
                 st.session_state.processed_preview = None
                 st.session_state.generated_video = None
@@ -557,7 +557,7 @@ def main():
                 st.session_state.generated_state = None
                 st.rerun()
             
-            # Handle uploaded image (only update if not clearing)
+            # Handle uploaded image
             if uploaded_file is not None and st.session_state.uploaded_image is None:
                 st.session_state.uploaded_image = Image.open(uploaded_file)
 
@@ -568,11 +568,13 @@ def main():
                     with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                         processed_image = pipeline.preprocess_image(st.session_state.uploaded_image)
                     
-                    clear_action = show_image_preview(
-                        processed_image, 
-                        "🎨 Background Removed (Auto)",
+                    # Show processed image with new reactive component
+                    image_preview(
+                        processed_image,
+                        component_id="single_processed",
+                        title="🎨 Background Removed (Auto)",
                         show_clear=False,
-                        clear_key="single_processed"
+                        show_info=True
                     )
                     st.session_state.processed_preview = processed_image
                 else:
@@ -641,24 +643,26 @@ def main():
                         st.session_state.generated_video = video_path
                         st.session_state.generated_state = state
                         st.session_state.processed_image = processed_image
-
-                        st.success("3D model video generated! Extracting GLB...")
-                        
-                        # Auto-extract GLB after video generation
-                        glb_path, _ = extract_glb(state, mesh_simplify_single, texture_size_single)
-                        st.session_state.generated_glb = glb_path
-                        st.success("✅ 3D model complete!")
-                        st.rerun()
+                        st.rerun()  # Rerun to show video before GLB extraction
             
             # Video preview with clear button
-            clear_video = show_video_preview(
-                st.session_state.generated_video,
-                show_clear=True,
-                clear_key="single_video"
-            )
-            if clear_video == "clear":
-                st.session_state.generated_video = None
-                st.rerun()
+            with st.container():
+                clear_video = show_video_preview(
+                    st.session_state.generated_video,
+                    show_clear=True,
+                    clear_key="single_video"
+                )
+                if clear_video == "clear":
+                    st.session_state.generated_video = None
+                    st.rerun()
+            
+            # Auto-extract GLB after video is shown
+            if st.session_state.generated_video and not st.session_state.generated_glb and st.session_state.generated_state:
+                with st.spinner("Extracting GLB..."):
+                    glb_path, _ = extract_glb(st.session_state.generated_state, mesh_simplify_single, texture_size_single)
+                    st.session_state.generated_glb = glb_path
+                    st.success("✅ 3D model complete!")
+                    st.rerun()
 
             # 3D model viewer with clear button
             if st.session_state.generated_glb:
@@ -806,15 +810,16 @@ def main():
             st.subheader("Output")
 
             # Video preview with clear button
-            clear_video = show_video_preview(
-                st.session_state.generated_video,
-                show_clear=True,
-                clear_key="multi_video"
-            )
-            if clear_video == "clear":
-                st.session_state.generated_video = None
-                st.rerun()
-
+            with st.container():
+                clear_video = show_video_preview(
+                    st.session_state.generated_video,
+                    show_clear=True,
+                    clear_key="multi_video"
+                )
+                if clear_video == "clear":
+                    st.session_state.generated_video = None
+                    st.rerun()
+.
             # 3D model viewer with clear button
             if st.session_state.generated_glb:
                 st.success("✅ Multi-View 3D Model Ready!")
