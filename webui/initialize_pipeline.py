@@ -4,9 +4,16 @@ import os
 import gc
 import glob
 import time
+import warnings
 import torch
 from pathlib import Path
 from trellis.pipelines import TrellisImageTo3DPipeline
+
+# Suppress warnings during pipeline initialization
+warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*xFormers is available.*")
+warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*renamed.*")
+warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 
 def cleanup_temp_files(max_age_hours=24):

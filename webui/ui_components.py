@@ -1,6 +1,13 @@
 """UI components for TRELLIS 3D Generator."""
 
 import streamlit as st
+import warnings
+
+# Suppress warnings in UI components
+warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*xFormers is available.*")
+warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*renamed.*")
+warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 
 def show_image_preview(image, title="Image", expanded=True):

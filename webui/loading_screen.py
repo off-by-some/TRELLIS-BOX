@@ -2,6 +2,13 @@
 
 import streamlit as st
 import time
+import warnings
+
+# Suppress warnings during loading
+warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*xFormers is available.*")
+warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*renamed.*")
+warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 
 def show_loading_screen():

@@ -2,15 +2,29 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import os
+import warnings
 from webui.loading_screen import show_loading_screen, finalize_loading
 from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
 from webui.ui_components import show_image_preview, show_video_preview, show_3d_model_viewer
 import base64
+
+# Suppress common warnings for cleaner output
+warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*xFormers is available.*")
+warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*renamed.*")
+warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads - conservative but effective settings
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,garbage_collection_threshold:0.8'
 # CUDA optimizations
 os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Non-blocking launches
+
+# Suppress common library warnings
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+# Suppress transformers cache warnings
+os.environ['TRANSFORMERS_NO_ADVISORY_WARNINGS'] = '1'
 
 from typing import *
 import torch
@@ -571,8 +585,8 @@ def main():
                             if use_refinement_single:
                                 st.info("Applying image refinement...")
                                 image = apply_image_refinement(image)
-                            # Preprocess image
-                            trial_id, processed_image = preprocess_image(image, use_refinement_single)
+                        # Preprocess image
+                        trial_id, processed_image = preprocess_image(image, use_refinement_single)
 
                         # Generate 3D model
                         state, video_path = image_to_3d(
@@ -803,12 +817,8 @@ if __name__ == "__main__":
         progress_bar, status_text, start_time = show_loading_screen()
 
         # Load the pipeline
-        try:
-            pipeline = load_pipeline()
-            st.session_state.pipeline = pipeline
-        except Exception as e:
-            st.error(f"Pipeline initialization failed: {str(e)}")
-            st.stop()
+        pipeline = load_pipeline()
+        st.session_state.pipeline = pipeline
 
         # Complete loading UI
         finalize_loading(progress_bar, status_text, pipeline)
