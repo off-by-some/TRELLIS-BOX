@@ -106,7 +106,8 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        st.video(video_path, loop=True, autoplay=True)
+        # Use clear_key as the unique key for the video element to prevent duplicate IDs
+        st.video(video_path, loop=True, autoplay=True, key=f"video_player_{clear_key}")
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
