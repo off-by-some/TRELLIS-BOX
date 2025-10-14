@@ -86,9 +86,44 @@ class TrellisImageTo3DPipeline(Pipeline):
         """
         Preprocess input image: remove background, crop, and resize to 518x518.
         
-        Preserves original image quality by removing background at full resolution,
-        then cropping and resizing to final size.
+        Crops out negative space before background removal to reduce memory usage.
         """
+        original_size = input.size
+        
+        # First, crop out negative space (white/transparent areas) to reduce image size
+        # This significantly reduces memory usage for images with lots of empty space
+        input_np = np.array(input.convert('RGBA'))
+        
+        # Detect content area by looking for non-white and non-transparent pixels
+        alpha = input_np[:, :, 3]
+        rgb = input_np[:, :, :3]
+        
+        # Find pixels that are either:
+        # 1. Not fully transparent (alpha < 250)
+        # 2. Not white (any RGB channel < 240)
+        content_mask = (alpha < 250) | (rgb.min(axis=2) < 240)
+        
+        if content_mask.any():
+            # Find bounding box of content
+            rows = np.any(content_mask, axis=1)
+            cols = np.any(content_mask, axis=0)
+            y_min, y_max = np.where(rows)[0][[0, -1]]
+            x_min, x_max = np.where(cols)[0][[0, -1]]
+            
+            # Add 5% padding to avoid cutting too close
+            height, width = input_np.shape[:2]
+            padding = int(min(width, height) * 0.05)
+            x_min = max(0, x_min - padding)
+            y_min = max(0, y_min - padding)
+            x_max = min(width, x_max + padding)
+            y_max = min(height, y_max + padding)
+            
+            # Crop to content area
+            input = input.crop((x_min, y_min, x_max, y_max))
+            
+            if input.size != original_size:
+                print(f"Cropped negative space: {original_size} -> {input.size} (saved {(1 - (input.size[0] * input.size[1]) / (original_size[0] * original_size[1])) * 100:.1f}% pixels)")
+        
         # Check for existing alpha channel
         has_alpha = (
             input.mode == 'RGBA' and 
@@ -98,7 +133,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         if has_alpha:
             output = input
         else:
-            # Remove background at full resolution for quality preservation
+            # Remove background
             input = input.convert('RGB')
             if getattr(self, 'rembg_session', None) is None:
                 cache_dir = os.environ.get('U2NET_HOME', os.path.expanduser('~/.u2net'))
