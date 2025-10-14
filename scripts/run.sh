@@ -282,11 +282,20 @@ main() {
     # Parse command line arguments
     if [ "$1" = "--diagnostics" ] || [ "$1" = "-d" ]; then
         print_status "Running GPU diagnostics mode"
-        check_gpu_access
-        GPU_FLAG="--gpus all"  # Default for diagnostics
-        if ! docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+
+        # Determine GPU access method (same logic as main run)
+        if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+            GPU_FLAG="--gpus all"
+            print_status "GPU access method: --gpus all"
+        elif docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
             GPU_FLAG="--runtime=nvidia"
+            print_status "GPU access method: --runtime=nvidia"
+        else
+            print_error "GPU access verification failed"
+            print_error "Run './scripts/check_gpu.sh' for diagnostics"
+            exit 1
         fi
+
         run_cuda_diagnostics
         exit 0
     fi
