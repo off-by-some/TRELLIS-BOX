@@ -56,10 +56,10 @@ def show_image_preview(image, title="Image", expanded=True, show_clear=False, cl
     with col_title:
         st.markdown(f"**{title}**")
     with col_clear:
-        clear_clicked = False
         if show_clear and clear_key and image is not None:
-            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear image", use_container_width=True):
-                clear_clicked = True
+            # Use a unique button key and return True when clicked
+            if st.button("🗑️", key=f"clear_img_{clear_key}", help="Clear image", use_container_width=True):
+                return "clear"
     
     # Show image or placeholder
     if image is not None:
@@ -68,7 +68,7 @@ def show_image_preview(image, title="Image", expanded=True, show_clear=False, cl
         placeholder = create_placeholder_image()
         st.image(placeholder, use_container_width=True)
     
-    return "clear" if clear_clicked else None
+    return None
 
 
 def create_placeholder_video():
@@ -102,11 +102,11 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
     with col2:
         clear_clicked = False
         if show_clear and clear_key and video_path:
-            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear video", use_container_width=True):
+            if st.button("🗑️", key=f"clear_video_{clear_key}", help="Clear video", use_container_width=True):
                 clear_clicked = True
     
     if video_path:
-        st.video(video_path, loop=True, autoplay=True)
+        st.video(video_path, loop=True, autoplay=True, key=f"video_{clear_key}")
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
@@ -173,7 +173,7 @@ def show_3d_model_viewer(glb_path, show_clear=False, clear_key=None, show_progre
     with col2:
         clear_clicked = False
         if show_clear and clear_key and glb_path:
-            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear 3D model", use_container_width=True):
+            if st.button("🗑️", key=f"clear_glb_{clear_key}", help="Clear 3D model", use_container_width=True):
                 clear_clicked = True
     
     if glb_path:
