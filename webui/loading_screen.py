@@ -46,17 +46,17 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .glass-overlay {{
         position: relative;
         width: 100%;
-        padding: 3rem;
+        padding: 2rem;
         background: rgba(102, 126, 234, 0.15);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
-        border-radius: 20px;
+        border-radius: 16px;
         border: 1px solid rgba(255, 255, 255, 0.2);
         box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
         text-align: center;
         transition: all 0.5s ease;
         cursor: pointer;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
     }}
     
     .glass-overlay:hover {{
@@ -67,39 +67,39 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     .glass-overlay h1 {{
         color: #667eea;
-        font-size: 3rem;
-        margin-bottom: 1rem;
+        font-size: 2.4rem;
+        margin-bottom: 0.8rem;
         font-weight: 700;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
     }}
     
     .glass-overlay h2 {{
         color: #764ba2;
-        font-size: 1.8rem;
-        margin-bottom: 1.5rem;
+        font-size: 1.44rem;
+        margin-bottom: 1.2rem;
         font-weight: 500;
     }}
     
     .glass-overlay p {{
         color: #333;
-        font-size: 1.1rem;
+        font-size: 0.88rem;
         line-height: 1.6;
-        margin-bottom: 1rem;
+        margin-bottom: 0.8rem;
     }}
     
     .loading-icon {{
-        font-size: 4rem;
+        font-size: 3.2rem;
         animation: pulse 2s ease-in-out infinite;
-        margin: 1rem 0;
+        margin: 0.8rem 0;
     }}
     
     .gpu-info {{
-        font-size: 1rem;
+        font-size: 0.8rem;
         color: #4a5568;
-        margin-top: 1.5rem;
-        padding: 0.75rem 1.5rem;
+        margin-top: 1.2rem;
+        padding: 0.6rem 1.2rem;
         background: rgba(255, 255, 255, 0.3);
-        border-radius: 10px;
+        border-radius: 8px;
         display: inline-block;
         font-weight: 500;
     }}
