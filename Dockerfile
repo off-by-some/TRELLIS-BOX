@@ -88,11 +88,10 @@ RUN poetry config virtualenvs.create false && \
 
 # Copy dependency files (including poetry.lock if it exists)
 COPY pyproject.toml poetry.lock* ./
-COPY wheels/ ./wheels/
 COPY extensions/ ./extensions/
 
 # Install application dependencies. We keep this separate from the other dependencies to 
-# avoid re-installing the same dependencies if wheels or kaolin fail to install.
+# avoid re-installing the same dependencies if kaolin fails to install.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cache/pypoetry \
     poetry install --only main --no-interaction --no-ansi
