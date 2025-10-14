@@ -965,6 +965,26 @@ if __name__ == "__main__":
         initial_sidebar_state="expanded"
     )
 
+    # GPU availability check
+    if not torch.cuda.is_available():
+        st.error("CUDA GPU not detected!")
+        st.error("TRELLIS requires a CUDA-compatible GPU to run.")
+        st.info("If you're running this in Docker, ensure:")
+        st.code("- Docker has GPU access (--gpus all)")
+        st.code("- NVIDIA Container Toolkit is installed")
+        st.code("- Run: nvidia-smi (on host) to verify GPU")
+        st.stop()
+
+    # Show CUDA info
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 0:
+        current_device = torch.cuda.current_device()
+        gpu_name = torch.cuda.get_device_name(current_device)
+        st.success(f"CUDA GPU detected: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
+    else:
+        st.error("❌ CUDA GPUs found but none accessible")
+        st.stop()
+
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
         # Show loading screen with spinner

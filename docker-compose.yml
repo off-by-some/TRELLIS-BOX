@@ -21,6 +21,9 @@ services:
         STREAMLIT_SERVER_ADDRESS: ${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
         STREAMLIT_SERVER_HEADLESS: ${STREAMLIT_SERVER_HEADLESS:-true}
         CACHE_DIR: ${CACHE_DIR:-/home/appuser/.cache}
+        HOST_CACHE_DIR: ${HOST_CACHE_DIR:-~/.cache/trellis}
+        HOST_HF_CACHE_DIR: ${HOST_HF_CACHE_DIR:-~/.cache/huggingface}
+        HOST_REMBG_CACHE_DIR: ${HOST_REMBG_CACHE_DIR:-~/.cache/rembg}
         HF_CACHE_DIR: ${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
         REMBG_CACHE_DIR: ${REMBG_CACHE_DIR:-/home/appuser/.u2net}
         TRELLIS_OUTPUT_DIR: ${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
@@ -29,12 +32,12 @@ services:
     ports:
       - "${HOST_PORT:-8501}:${APP_PORT:-8501}"
     volumes:
-      # Persist model cache between runs
-      - ${CACHE_VOLUME:-trellis-cache}:${CACHE_DIR:-/home/appuser/.cache}
+      # Persist model cache between runs (use bind mounts for better compatibility)
+      - ${HOST_CACHE_DIR:-~/.cache/trellis}:${CACHE_DIR:-/home/appuser/.cache}
       # Persist Hugging Face cache
-      - ${HF_CACHE_VOLUME:-huggingface-cache}:${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+      - ${HOST_HF_CACHE_DIR:-~/.cache/huggingface}:${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
       # Persist rembg model cache
-      - ${REMBG_CACHE_VOLUME:-rembg-cache}:${REMBG_CACHE_DIR:-/home/appuser/.u2net}
+      - ${HOST_REMBG_CACHE_DIR:-~/.cache/rembg}:${REMBG_CACHE_DIR:-/home/appuser/.u2net}
       # Persist generated outputs (bind mount to local directory)
       - ${OUTPUTS_HOST_DIR:-./outputs}:${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
     environment:

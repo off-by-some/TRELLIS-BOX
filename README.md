@@ -52,6 +52,7 @@ Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimi
 - **GPU**: NVIDIA GPU with at least 8GB VRAM (recommended: 16GB+)
 - **Platform**: Linux, macOS, or Windows with Docker Desktop
 - **Storage**: ~20GB free space for models and Docker layers
+- **Nvidia GPU**: Pull requests welcome for additional GPU support!
 
 ### Docker Setup
 1. **Install NVIDIA Container Toolkit** (Linux):
