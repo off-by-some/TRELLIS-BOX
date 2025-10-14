@@ -469,4 +469,12 @@ class TrellisImageTo3DPipeline(Pipeline):
         torch.manual_seed(seed)
         coords = self.sample_sparse_structure(cond, num_samples, sparse_structure_sampler_params)
         slat = self.sample_slat(cond, coords, slat_sampler_params)
+        
+        # Critical: Clean up conditioning and coords before decoding to free memory
+        del cond, coords
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        
         return self.decode_slat(slat, formats)
