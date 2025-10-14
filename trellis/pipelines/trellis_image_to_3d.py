@@ -86,63 +86,19 @@ class TrellisImageTo3DPipeline(Pipeline):
         """
         Preprocess input image: remove background, crop, and resize to 518x518.
         
-        Crops out negative space before background removal to reduce memory usage.
+        Resizes large images before background removal to prevent OOM errors.
         """
-        original_size = input.size
-        print(f"Input image size: {original_size}, mode: {input.mode}")
+        # Resize images where either dimension exceeds 1024 to prevent OOM
+        # Only resize if necessary, preserving original size for smaller images
+        max_dimension = 1024
+        width, height = input.size
         
-        # First, crop out negative space (white/transparent areas) to reduce image size
-        # This significantly reduces memory usage for images with lots of empty space
-        input_np = np.array(input.convert('RGBA'))
-        
-        # Detect content area by looking for non-transparent pixels with actual content
-        alpha = input_np[:, :, 3]
-        rgb = input_np[:, :, :3]
-        
-        # Find pixels that have visible content:
-        # 1. Alpha > 10 (not transparent)
-        # 2. AND (not pure white OR has some color variation)
-        is_visible = alpha > 10
-        is_white = (rgb[:, :, 0] > 240) & (rgb[:, :, 1] > 240) & (rgb[:, :, 2] > 240)
-        content_mask = is_visible & ~is_white
-        
-        content_pixels = content_mask.sum()
-        total_pixels = content_mask.size
-        print(f"Content detection: {content_pixels:,} / {total_pixels:,} pixels ({content_pixels/total_pixels*100:.1f}%)")
-        
-        if content_mask.any():
-            # Find bounding box of content
-            rows = np.any(content_mask, axis=1)
-            cols = np.any(content_mask, axis=0)
-            
-            if rows.any() and cols.any():
-                y_min, y_max = np.where(rows)[0][[0, -1]]
-                x_min, x_max = np.where(cols)[0][[0, -1]]
-                
-                print(f"Content bounding box: x=[{x_min}, {x_max}], y=[{y_min}, {y_max}]")
-                
-                # Add 5% padding to avoid cutting too close
-                height, width = input_np.shape[:2]
-                padding = int(min(width, height) * 0.05)
-                x_min = max(0, x_min - padding)
-                y_min = max(0, y_min - padding)
-                x_max = min(width - 1, x_max + padding)
-                y_max = min(height - 1, y_max + padding)
-                
-                print(f"With padding: x=[{x_min}, {x_max}], y=[{y_min}, {y_max}]")
-                
-                # Crop to content area (PIL crop is exclusive on right/bottom)
-                input = input.crop((x_min, y_min, x_max + 1, y_max + 1))
-                
-                if input.size != original_size:
-                    saved_percent = (1 - (input.size[0] * input.size[1]) / (original_size[0] * original_size[1])) * 100
-                    print(f"✂️ Cropped negative space: {original_size} -> {input.size} (saved {saved_percent:.1f}% pixels)")
-                else:
-                    print(f"⚠️ Crop resulted in same size: {input.size}")
-            else:
-                print("⚠️ Content mask exists but no rows/cols found")
-        else:
-            print("⚠️ No content detected in image")
+        if width > max_dimension or height > max_dimension:
+            # Scale down so the largest dimension becomes max_dimension
+            ratio = max_dimension / max(width, height)
+            new_size = (int(width * ratio), int(height * ratio))
+            input = input.resize(new_size, Image.Resampling.LANCZOS)
+            print(f"Pre-resized input image from {(width, height)} to {input.size} before background removal")
         
         # Check for existing alpha channel
         has_alpha = (
