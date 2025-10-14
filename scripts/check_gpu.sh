@@ -37,36 +37,36 @@ echo ""
 echo "Memory: ${FREE_MEM}MB free / ${TOTAL_MEM}MB total"
 
 if [ "$FREE_MEM" -lt 8000 ]; then
-    echo "⚠️  WARNING: Less than 8GB free!"
-    echo "Recommendation: Kill unnecessary processes before running TRELLIS"
+    echo "⚠ Low memory: Less than 8GB free"
+    echo "Recommendation: Terminate unnecessary GPU processes before running TRELLIS"
     echo ""
-    echo "To kill a process: sudo kill -9 <PID>"
-    echo "PIDs using GPU are listed above"
+    echo "To terminate a process: sudo kill -9 <PID>"
+    echo "GPU processes are listed above"
 else
-    echo "✅ Sufficient memory available to run TRELLIS"
+    echo "✓ Sufficient memory available for TRELLIS"
 fi
 
 echo ""
 echo "=== Docker GPU Access Test ==="
 echo "Testing NVIDIA Container Toolkit..."
 
-# Test Docker GPU access
-if docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi --query-gpu=name --format=csv,noheader > /dev/null 2>&1; then
-    echo "✅ Docker GPU access: WORKING"
-    GPU_NAME=$(docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
-    echo "GPU in container: $GPU_NAME"
-else
-    echo "❌ Docker GPU access: FAILED"
-    echo ""
-    echo "Troubleshooting steps:"
-    echo "1. Install NVIDIA Container Toolkit:"
-    echo "   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
-    echo "   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list"
-    echo "   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit"
-    echo "   sudo systemctl restart docker"
-    echo ""
-    echo "2. Test again: docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi"
-fi
+    # Test Docker GPU access
+    if docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi --query-gpu=name --format=csv,noheader > /dev/null 2>&1; then
+        echo "✓ Docker GPU access: Available"
+        GPU_NAME=$(docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+        echo "GPU in container: $GPU_NAME"
+    else
+        echo "✗ Docker GPU access: Unavailable"
+        echo ""
+        echo "Troubleshooting steps:"
+        echo "1. Install NVIDIA Container Toolkit:"
+        echo "   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+        echo "   curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list"
+        echo "   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit"
+        echo "   sudo systemctl restart docker"
+        echo ""
+        echo "2. Test again: docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi"
+    fi
 
 echo ""
 echo "=== System Information ==="
@@ -75,11 +75,11 @@ echo "NVIDIA driver: $(nvidia-smi --query-gpu=driver_version --format=csv,nohead
 echo "CUDA version: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | cut -d. -f1-2).0"
 
 echo ""
-echo "=== TRELLIS Readiness Check ==="
+echo "=== TRELLIS System Readiness ==="
 if [ "$FREE_MEM" -ge 8000 ] && docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-    echo "🎉 System is READY for TRELLIS!"
-    echo "Run: ./scripts/run.sh"
+    echo "✓ System ready for TRELLIS"
+    echo "Command: ./scripts/run.sh"
 else
-    echo "⚠️  System needs fixes before running TRELLIS"
+    echo "✗ System requires configuration before running TRELLIS"
 fi
 

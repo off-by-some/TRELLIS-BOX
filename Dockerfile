@@ -206,6 +206,77 @@ COPY extensions/ ./extensions/
 COPY assets/ ./assets/
 COPY app.py ./
 
+# Create diagnostic script
+RUN <<EOF
+cat > /app/cuda_diag.py << 'DIAG_EOF'
+#!/usr/bin/env python3
+import sys
+import subprocess
+import os
+
+print("=== TRELLIS CUDA Diagnostics ===\n")
+
+# Check nvidia-smi
+print("1. NVIDIA GPU Status:")
+try:
+    result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=10)
+    if result.returncode == 0:
+        print("✓ nvidia-smi available")
+        # Extract GPU info
+        lines = result.stdout.split('\n')
+        for line in lines:
+            if 'NVIDIA' in line and 'GPU' in line:
+                print(f"  GPU: {line.strip()}")
+                break
+    else:
+        print("✗ nvidia-smi failed")
+        print(f"  Error: {result.stderr}")
+except Exception as e:
+    print(f"✗ nvidia-smi not available: {e}")
+
+print("\n2. PyTorch CUDA Status:")
+try:
+    import torch
+    print(f"  PyTorch version: {torch.__version__}")
+    print(f"  CUDA available: {torch.cuda.is_available()}")
+
+    if torch.cuda.is_available():
+        print(f"  CUDA version: {torch.version.cuda}")
+        print(f"  GPU count: {torch.cuda.device_count()}")
+
+        for i in range(torch.cuda.device_count()):
+            try:
+                gpu_name = torch.cuda.get_device_name(i)
+                gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+                print(f"  GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
+            except Exception as e:
+                print(f"  GPU {i}: Error getting info - {e}")
+    else:
+        print("  Reason: PyTorch CUDA not compiled or GPU not accessible")
+
+except ImportError:
+    print("✗ PyTorch not available")
+
+print("\n3. Environment Variables:")
+cuda_vars = {k: v for k, v in os.environ.items() if 'CUDA' in k or 'NVIDIA' in k}
+if cuda_vars:
+    for k, v in cuda_vars.items():
+        print(f"  {k}={v}")
+else:
+    print("  No CUDA/NVIDIA environment variables found")
+
+print("\n4. Container GPU Access:")
+if os.path.exists('/dev/nvidia0'):
+    print("✓ NVIDIA device files present")
+else:
+    print("✗ NVIDIA device files not found")
+
+print("\n=== Diagnostics Complete ===")
+DIAG_EOF
+
+chmod +x /app/cuda_diag.py
+EOF
+
 # Create non-root user for security
 RUN <<EOF
 set -e

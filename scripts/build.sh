@@ -76,7 +76,7 @@ for arg in "$@"; do
 done
 
 echo "=========================================="
-echo "Building Trellis 3D Docker Image"
+echo "Building TRELLIS Docker Image"
 echo "=========================================="
 echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
 echo "CUDA Version: ${CUDA_VERSION}"
@@ -94,12 +94,12 @@ DOCKER_BUILDKIT=1 docker build \
 
 echo ""
 echo "=========================================="
-echo "Build complete!"
+echo "Build completed successfully"
 echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
 echo "=========================================="
 echo ""
-echo "To run the container:"
+echo "Next steps:"
 echo "  ./scripts/run.sh"
-echo "  # Or with docker-compose:"
+echo "  # Or with Docker Compose:"
 echo "  docker-compose up"
-echo "  # Then visit: http://localhost:${APP_PORT}"
+echo "  # Access at: http://localhost:${APP_PORT}"

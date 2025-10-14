@@ -40,13 +40,13 @@ fi
 
 # Check if container is already running
 if docker ps --filter "name=trellis-box" --filter "status=running" | grep -q trellis-box; then
-    print_status "TRELLIS container is already running at http://localhost:${HOST_PORT}"
+    print_status "TRELLIS container already running at http://localhost:${HOST_PORT}"
     exit 0
 fi
 
 print_status "Restarting TRELLIS container..."
 if docker start -ai trellis-box; then
-    print_success "TRELLIS restarted successfully"
+    print_success "TRELLIS container restarted"
 else
     print_error "Failed to restart TRELLIS container"
     exit 1

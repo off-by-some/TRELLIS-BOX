@@ -965,25 +965,75 @@ if __name__ == "__main__":
         initial_sidebar_state="expanded"
     )
 
-    # GPU availability check
-    if not torch.cuda.is_available():
-        st.error("CUDA GPU not detected!")
-        st.error("TRELLIS requires a CUDA-compatible GPU to run.")
-        st.info("If you're running this in Docker, ensure:")
-        st.code("- Docker has GPU access (--gpus all)")
-        st.code("- NVIDIA Container Toolkit is installed")
-        st.code("- Run: nvidia-smi (on host) to verify GPU")
-        st.stop()
+    # GPU availability check with diagnostics
+    import subprocess
+    import os
 
-    # Show CUDA info
-    gpu_count = torch.cuda.device_count()
-    if gpu_count > 0:
-        current_device = torch.cuda.current_device()
-        gpu_name = torch.cuda.get_device_name(current_device)
-        st.success(f"CUDA GPU detected: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
-    else:
-        st.error("❌ CUDA GPUs found but none accessible")
-        st.stop()
+    # Check if NVIDIA GPU is available via nvidia-smi
+    nvidia_available = False
+    try:
+        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=5)
+        nvidia_available = result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        nvidia_available = False
+
+    # Check PyTorch CUDA availability
+    pytorch_cuda_available = torch.cuda.is_available()
+
+    # Display diagnostic information
+    with st.expander("GPU Diagnostics", expanded=True):
+        st.write("**System Information:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("NVIDIA GPU Available", "Yes" if nvidia_available else "No")
+        with col2:
+            st.metric("PyTorch CUDA Available", "Yes" if pytorch_cuda_available else "No")
+
+        if nvidia_available:
+            st.code("nvidia-smi output:\n" + subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout[:500] + "...")
+
+        st.write("**Environment Variables:**")
+        cuda_vars = {k: v for k, v in os.environ.items() if 'CUDA' in k or 'NVIDIA' in k}
+        if cuda_vars:
+            st.json(cuda_vars)
+        else:
+            st.write("No CUDA/NVIDIA environment variables found")
+
+    # Main GPU check
+    if not pytorch_cuda_available:
+        if nvidia_available:
+            st.warning("NVIDIA GPU detected but PyTorch CUDA not available")
+            st.info("This may be due to:")
+            st.code("• PyTorch CUDA version mismatch")
+            st.code("• CUDA runtime/driver version incompatibility")
+            st.code("• Environment variable issues")
+            st.code("• Container GPU passthrough problems")
+
+            # Try to continue anyway
+            if st.button("Continue Anyway (May Fail)"):
+                st.warning("Proceeding without CUDA support. Performance will be severely degraded.")
+            else:
+                st.stop()
+        else:
+            st.error("No CUDA-compatible GPU detected")
+            st.error("TRELLIS requires a CUDA-compatible GPU to run.")
+            st.info("Ensure:")
+            st.code("• NVIDIA GPU is installed")
+            st.code("• NVIDIA drivers are installed")
+            st.code("• Docker has GPU access (--gpus all)")
+            st.code("• NVIDIA Container Toolkit is installed")
+            st.stop()
+
+    # Show CUDA info if available
+    if pytorch_cuda_available:
+        gpu_count = torch.cuda.device_count()
+        if gpu_count > 0:
+            current_device = torch.cuda.current_device()
+            gpu_name = torch.cuda.get_device_name(current_device)
+            st.success(f"CUDA GPU available: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
+        else:
+            st.error("CUDA available but no GPUs accessible")
+            st.stop()
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
@@ -999,16 +1049,16 @@ if __name__ == "__main__":
             <div style="
                 text-align: center;
                 padding: 2rem;
-                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 border-radius: 15px;
                 color: white;
                 margin: 2rem 0;
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             ">
-                <h2 style="margin-bottom: 1rem;">🎨 Loading AI Models</h2>
+                <h2 style="margin-bottom: 1rem;">Initializing TRELLIS</h2>
                 <p style="margin-bottom: 1rem; opacity: 0.9;">
-                    This is a one-time setup that may take 2-5 minutes.<br>
-                    The application is downloading and initializing AI models.
+                    Loading AI models and preparing 3D generation pipeline.<br>
+                    This one-time setup may take 2-5 minutes.
                 </p>
                 <div style="font-size: 3rem;">⏳</div>
             </div>
@@ -1020,12 +1070,12 @@ if __name__ == "__main__":
 
             # Show initialization steps
             steps = [
-                "🔧 Setting up PyTorch and CUDA...",
-                "📦 Downloading TRELLIS model weights...",
-                "🎨 Initializing image processing pipeline...",
-                "🧠 Configuring memory optimizations...",
-                "🎯 Loading Stable Diffusion components...",
-                "🏗️ Preparing 3D reconstruction pipeline..."
+                "Setting up PyTorch and CUDA environment...",
+                "Downloading TRELLIS model weights...",
+                "Initializing image processing pipeline...",
+                "Configuring memory optimizations...",
+                "Loading Stable Diffusion components...",
+                "Preparing 3D reconstruction pipeline..."
             ]
 
             # Use a spinner for the actual loading
@@ -1044,15 +1094,15 @@ if __name__ == "__main__":
                     global pipeline
                     pipeline = st.session_state.pipeline
                 except Exception as e:
-                    st.error(f"Failed to load pipeline: {str(e)}")
+                    st.error(f"Pipeline initialization failed: {str(e)}")
                     st.stop()
 
                 # Mark as loaded
                 progress_bar.progress(100)
-                status_text.text("✅ Application ready!")
+                status_text.text("Application ready")
 
                 # Show success message
-                st.success("🎉 TRELLIS 3D Generator is ready!")
+                st.success("TRELLIS initialization completed")
                 st.balloons()
 
                 # Brief pause to show success

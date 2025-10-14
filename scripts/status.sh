@@ -38,9 +38,9 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-echo "🚀 TRELLIS Docker Status"
-echo "========================"
-echo "Includes TRELLIS models and rembg background removal models"
+echo "TRELLIS Docker Status"
+echo "====================="
+echo "TRELLIS models and rembg background removal"
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
@@ -51,16 +51,16 @@ fi
 # Check container status
 if docker ps -a --filter "name=trellis-box" | grep -q trellis-box; then
     if docker ps --filter "name=trellis-box" --filter "status=running" | grep -q trellis-box; then
-        print_success "TRELLIS container is RUNNING"
-        echo "  🌐 Web interface: http://localhost:${HOST_PORT}"
-        echo "  🐳 Container name: trellis-box"
+        print_success "TRELLIS container running"
+        echo "  Web interface: http://localhost:${HOST_PORT}"
+        echo "  Container: trellis-box"
     else
-        print_warning "TRELLIS container exists but is STOPPED"
-        echo "  Run './restart.sh' to start it again"
+        print_warning "TRELLIS container exists but stopped"
+        echo "  Start with: ./scripts/restart.sh"
     fi
 else
     print_status "No TRELLIS container found"
-    echo "  Run './run.sh' to create and start one"
+    echo "  Create with: ./scripts/run.sh"
 fi
 
 echo ""
@@ -91,23 +91,26 @@ fi
 
 echo ""
 
-# Cache volumes check (Docker named volumes)
-if docker volume ls --format "table {{.Name}}" | grep -q trellis-cache; then
-    print_success "TRELLIS cache volume exists (Docker named volume)"
+# Cache directories check (bind mounts)
+if [ -d "$HOME/.cache/trellis" ]; then
+    cache_size=$(du -sh "$HOME/.cache/trellis" 2>/dev/null | cut -f1)
+    print_success "TRELLIS cache: $HOME/.cache/trellis (${cache_size})"
 else
-    print_status "TRELLIS cache volume not created yet"
+    print_status "TRELLIS cache directory not created"
 fi
 
-if docker volume ls --format "table {{.Name}}" | grep -q huggingface-cache; then
-    print_success "Hugging Face cache volume exists (Docker named volume)"
+if [ -d "$HOME/.cache/huggingface" ]; then
+    hf_size=$(du -sh "$HOME/.cache/huggingface" 2>/dev/null | cut -f1)
+    print_success "Hugging Face cache: $HOME/.cache/huggingface (${hf_size})"
 else
-    print_status "Hugging Face cache volume not created yet"
+    print_status "Hugging Face cache directory not created"
 fi
 
-if docker volume ls --format "table {{.Name}}" | grep -q rembg-cache; then
-    print_success "rembg cache volume exists (Docker named volume)"
+if [ -d "$HOME/.cache/rembg" ]; then
+    rembg_size=$(du -sh "$HOME/.cache/rembg" 2>/dev/null | cut -f1)
+    print_success "rembg cache: $HOME/.cache/rembg (${rembg_size})"
 else
-    print_status "rembg cache volume not created yet"
+    print_status "rembg cache directory not created"
 fi
 
 echo ""

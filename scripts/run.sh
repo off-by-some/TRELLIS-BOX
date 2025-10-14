@@ -35,6 +35,10 @@ HOST_REMBG_CACHE_DIR=${HOST_REMBG_CACHE_DIR:-$HOME/.cache/rembg}
 STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
 STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
 
+# =============================================================================
+# Usage: ./scripts/run.sh [--diagnostics|-d]
+# =============================================================================
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -177,28 +181,28 @@ check_gpu_access() {
 
     # Test if nvidia-docker is working with --gpus all
     if docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-        print_success "GPU access with --gpus all: WORKING"
+        print_success "GPU access verified (--gpus all)"
         return 0
     fi
 
     # Test if nvidia-docker is working with --runtime=nvidia
     if docker run --rm --runtime=nvidia nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-        print_warning "GPU access with --runtime=nvidia: WORKING (older Docker setup)"
-        print_warning "Consider upgrading to Docker with --gpus support"
+        print_warning "GPU access verified (--runtime=nvidia)"
+        print_warning "Consider upgrading Docker for improved --gpus support"
         return 0
     fi
 
     # Check if basic nvidia runtime works at all
     if docker run --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-        print_warning "Basic NVIDIA runtime works, but GPU passthrough is not configured"
-        print_error "Try: sudo apt-get install nvidia-docker2 && sudo systemctl restart docker"
+        print_warning "NVIDIA runtime available, but GPU passthrough not configured"
+        print_error "Install NVIDIA Container Toolkit: sudo apt-get install nvidia-docker2 && sudo systemctl restart docker"
     else
-        print_error "NVIDIA Container Toolkit not properly installed or GPU not available"
-        print_error "Install NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
-        print_error "Or check that your GPU is properly installed: nvidia-smi"
+        print_error "NVIDIA Container Toolkit not installed or GPU unavailable"
+        print_error "Installation guide: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
+        print_error "Verify GPU: nvidia-smi"
     fi
 
-    print_error "Cannot proceed without GPU access. TRELLIS requires CUDA."
+    print_error "GPU access unavailable. TRELLIS requires CUDA-compatible GPU."
     exit 1
 }
 
@@ -207,7 +211,7 @@ start_container() {
     print_status "Starting TRELLIS container..."
     print_status "Image: trellis-box:latest"
     print_status "Port: ${HOST_PORT} -> ${APP_PORT}"
-    print_status "GPU Memory: ${CUDA_VISIBLE_DEVICES:-all available}"
+    print_status "GPU access: ${CUDA_VISIBLE_DEVICES:-all available}"
     print_status "================================"
 
     # Create host directories
@@ -216,20 +220,28 @@ start_container() {
     mkdir -p "$HOST_HF_CACHE_DIR"
     mkdir -p "$HOST_REMBG_CACHE_DIR"
 
-    # Use --gpus all (modern Docker) or --runtime=nvidia (legacy) based on what works
+    # Determine GPU access method
     if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
         GPU_FLAG="--gpus all"
-        print_status "Using --gpus flag for GPU access"
+        print_status "GPU access method: --gpus all"
+        print_status "GPU access configured for container"
     elif docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
         GPU_FLAG="--runtime=nvidia"
-        print_warning "Using --runtime=nvidia (consider upgrading Docker for --gpus support)"
+        print_status "GPU access method: --runtime=nvidia"
+        print_warning "Consider upgrading Docker for improved --gpus support"
     else
-        print_error "GPU access test failed - cannot start container"
-        print_error "Run './scripts/check_gpu.sh' to diagnose GPU issues"
+        print_error "GPU access verification failed"
+        print_error "Run './scripts/check_gpu.sh' for diagnostics"
         exit 1
     fi
 
     # Use bind mounts instead of named volumes for better compatibility
+    echo ""
+    print_status "Starting TRELLIS container..."
+    print_status "Access at: http://localhost:${HOST_PORT}"
+    print_status "Press Ctrl+C to stop"
+    echo ""
+
     docker run $GPU_FLAG \
         -it \
         --rm \
@@ -245,13 +257,39 @@ start_container() {
         -e STREAMLIT_SERVER_HEADLESS="${STREAMLIT_SERVER_HEADLESS}" \
         trellis-box
 
-    print_success "Container stopped"
+    print_success "TRELLIS container stopped"
+}
+
+# Function to run CUDA diagnostics inside container
+run_cuda_diagnostics() {
+    print_status "Running CUDA diagnostics inside container..."
+
+    if docker run --rm $GPU_FLAG \
+        --name trellis-diagnostics \
+        trellis-box python3 /app/cuda_diag.py; then
+        print_success "Diagnostics completed"
+    else
+        print_error "Diagnostics failed"
+        print_error "Container may not have proper GPU access"
+    fi
 }
 
 # Main execution
 main() {
-    echo "🚀 TRELLIS Docker Launcher"
-    echo "========================="
+    echo "TRELLIS Docker Launcher"
+    echo "======================="
+
+    # Parse command line arguments
+    if [ "$1" = "--diagnostics" ] || [ "$1" = "-d" ]; then
+        print_status "Running GPU diagnostics mode"
+        check_gpu_access
+        GPU_FLAG="--gpus all"  # Default for diagnostics
+        if ! docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+            GPU_FLAG="--runtime=nvidia"
+        fi
+        run_cuda_diagnostics
+        exit 0
+    fi
 
     # Check GPU access first
     check_gpu_access

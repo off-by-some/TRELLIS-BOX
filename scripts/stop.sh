@@ -25,20 +25,20 @@ print_warning() {
 
 # Check if container exists
 if ! docker ps -a --filter "name=trellis-box" | grep -q trellis-box; then
-    print_warning "No TRELLIS container found to stop."
+    print_warning "No TRELLIS container found"
     exit 0
 fi
 
 # Check if container is running
 if ! docker ps --filter "name=trellis-box" --filter "status=running" | grep -q trellis-box; then
-    print_status "TRELLIS container is not currently running."
+    print_status "TRELLIS container not running"
     exit 0
 fi
 
 print_status "Stopping TRELLIS container..."
 if docker stop trellis-box > /dev/null 2>&1; then
-    print_success "TRELLIS container stopped successfully"
-    print_status "Run './restart.sh' to start it again (keeps cached models)"
+    print_success "TRELLIS container stopped"
+    print_status "Restart with: ./scripts/restart.sh"
 else
     print_error "Failed to stop TRELLIS container"
     exit 1
