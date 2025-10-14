@@ -106,8 +106,14 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        # Use clear_key as the unique key for the video element to prevent duplicate IDs
-        st.video(video_path, loop=True, autoplay=True, key=f"video_player_{clear_key}")
+        # Use st.empty() to create unique rendering contexts for each video
+        # This prevents duplicate element IDs when the same video is shown in multiple tabs
+        video_container = st.empty()
+        with video_container:
+            # Add a unique HTML comment to differentiate the videos
+            st.markdown(f"<!-- video-{clear_key} -->", unsafe_allow_html=True)
+            st.video(video_path, loop=True, autoplay=True)
+        
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
