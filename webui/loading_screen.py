@@ -79,11 +79,13 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     .banner-image {{
         max-width: 400px;
+        max-height: 400px;
         width: 100%;
         height: auto;
         margin: 0 auto 1rem auto;
         display: block;
         animation: pulse 2s ease-in-out infinite;
+        object-fit: contain;
     }}
     
     .glass-overlay p {{
