@@ -7,8 +7,7 @@ name = "trellis-box"
 version = "0.1.0"
 description = "Trellis 3D generation with Streamlit interface"
 authors = ["Cassidy Bridges <cassidybridges@gmail.com>"]
-readme = "README.md"
-packages = [{include = "trellis"}]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
