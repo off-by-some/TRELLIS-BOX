@@ -577,7 +577,7 @@ class ModelGenerator:
                     seed=seed,
                     formats=["gaussian", "mesh"],
                     preprocess_image=False,
-                    target_size=(resize_width, resize_height),
+                    target_size=(st.session_state.get("resize_width", 518), st.session_state.get("resize_height", 518)),
                     sparse_structure_sampler_params={
                         "steps": params.ss_sampling_steps,
                         "cfg_strength": params.ss_guidance_strength,
@@ -680,7 +680,7 @@ class ModelGenerator:
         # Get multi-view conditioning by passing all images at once
         pipeline = StateManager.get_pipeline()
         with torch.inference_mode():
-            cond = pipeline.get_cond(images, target_size=(resize_width, resize_height))
+            cond = pipeline.get_cond(images, target_size=(st.session_state.get("resize_width", 518), st.session_state.get("resize_height", 518)))
 
         # Display contradiction score for multi-view inputs
         if cond.get('multi_view', False):
@@ -962,6 +962,8 @@ class SingleImageUI:
                         help="Width to resize images to for conditioning model",
                         key=f"resize_width_{trial_id}"
                     )
+                    # Store in session state for use in generation
+                    st.session_state["resize_width"] = resize_width
                 with col2:
                     resize_height = st.number_input(
                         "Height",
@@ -972,6 +974,8 @@ class SingleImageUI:
                         help="Height to resize images to for conditioning model",
                         key=f"resize_height_{trial_id}"
                     )
+                    # Store in session state for use in generation
+                    st.session_state["resize_height"] = resize_height
 
                 # Batch size for multi-image only
                 if is_multi_image and batch_size_key:
