@@ -510,6 +510,11 @@ def main():
             st.subheader("Input")
             uploaded_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"], key="single_image")
 
+            # Show preview of uploaded image
+            if uploaded_file is not None:
+                image = Image.open(uploaded_file)
+                show_image_preview(image, "📷 Uploaded Image", expanded=True)
+
             with st.expander("Generation Settings", expanded=False):
                 seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
                 randomize_seed_single = st.checkbox("Randomize Seed", value=True, key="randomize_single")
@@ -646,10 +651,12 @@ def main():
 
                 # Display uploaded images
                 if len(multi_uploaded_files) >= 2:
+                    st.markdown("**Uploaded Images:**")
                     image_cols = st.columns(min(len(multi_uploaded_files), 4))
                     for i, uploaded_file in enumerate(multi_uploaded_files):
                         with image_cols[i]:
-                            st.image(uploaded_file, caption=f"Image {i+1}", width=150)
+                            image = Image.open(uploaded_file)
+                            st.image(image, caption=f"Image {i+1}", width=150)
 
             with st.expander("Generation Settings", expanded=False):
                 seed_multi = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_multi")
