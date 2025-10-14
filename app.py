@@ -99,7 +99,6 @@ class StateManager:
     GENERATED_STATE = 'generated_state'
     CLEANUP_COUNTER = 'cleanup_counter'
     IS_GENERATING = 'is_generating'
-    VIDEO_SHOWN = 'video_shown'
     
     @staticmethod
     def initialize() -> None:
@@ -115,7 +114,6 @@ class StateManager:
             StateManager.GENERATED_STATE: None,
             StateManager.CLEANUP_COUNTER: 0,
             StateManager.IS_GENERATING: False,
-            StateManager.VIDEO_SHOWN: False,
         }
         
         for key, default_value in defaults.items():
@@ -893,6 +891,81 @@ class SingleImageUI:
                 st.session_state.processed_preview = None
     
     @staticmethod
+    def _render_output_preview(video_key: str, glb_key: str, download_key: str, simplify_key: str, texture_key: str) -> None:
+        """
+        Render output preview section (video + GLB viewer).
+        This is a shared component used by both single and multi-image tabs.
+        
+        Args:
+            video_key: Unique key for video clear button
+            glb_key: Unique key for GLB clear button
+            download_key: Unique key for download button
+            simplify_key: Session state key for mesh simplify parameter
+            texture_key: Session state key for texture size parameter
+        """
+        # Video preview
+        with st.container():
+            clear_video = show_video_preview(
+                StateManager.get_generated_video(),
+                show_clear=True,
+                clear_key=video_key
+            )
+            if clear_video == "clear":
+                StateManager.set_generated_video(None)
+                MemoryManager.cleanup_session_state(clear_all=False)
+                st.rerun()
+        
+        # Auto-extract GLB after video is shown
+        generated_video = StateManager.get_generated_video()
+        generated_glb = StateManager.get_generated_glb()
+        generated_state = StateManager.get_generated_state()
+        
+        if generated_video and not generated_glb and generated_state:
+            with st.spinner("Extracting GLB..."):
+                # Get export parameters from session state
+                mesh_simplify = st.session_state.get(simplify_key, 0.95)
+                texture_size = st.session_state.get(texture_key, 1024)
+                
+                export_params = ExportParams(
+                    mesh_simplify=mesh_simplify,
+                    texture_size=texture_size
+                )
+                
+                glb_path, _ = GLBExporter.extract(generated_state, export_params)
+                StateManager.set_generated_glb(glb_path)
+                st.success("✅ 3D model complete!")
+                st.rerun()
+        
+        # 3D model viewer
+        if generated_glb:
+            st.success("✅ 3D Model Ready!")
+            
+            clear_glb = show_3d_model_viewer(
+                generated_glb,
+                show_clear=True,
+                clear_key=glb_key
+            )
+            if clear_glb == "clear":
+                StateManager.set_generated_glb(None)
+                StateManager.set_generated_state(None)
+                MemoryManager.cleanup_session_state(clear_all=False)
+                st.rerun()
+            
+            # Download button
+            with open(generated_glb, "rb") as file:
+                st.download_button(
+                    label="📥 Download GLB",
+                    data=file,
+                    file_name="generated_model.glb",
+                    mime="model/gltf-binary",
+                    type="primary",
+                    key=download_key
+                )
+        else:
+            # Show placeholder when no GLB
+            show_3d_model_viewer(None)
+    
+    @staticmethod
     def _render_output_column() -> None:
         """Render the output column."""
         st.subheader("Output")
@@ -975,66 +1048,14 @@ class SingleImageUI:
                     StateManager.set_generating(False)
                 st.rerun()
         
-        # Video preview
-        with st.container():
-            clear_video = show_video_preview(
-                StateManager.get_generated_video(),
-                show_clear=True,
-                clear_key="single_video"
-            )
-            if clear_video == "clear":
-                StateManager.set_generated_video(None)
-                MemoryManager.cleanup_session_state(clear_all=False)
-                st.rerun()
-        
-        # Auto-extract GLB after video is shown
-        generated_video = StateManager.get_generated_video()
-        generated_glb = StateManager.get_generated_glb()
-        generated_state = StateManager.get_generated_state()
-        
-        if generated_video and not generated_glb and generated_state:
-            with st.spinner("Extracting GLB..."):
-                # Get export parameters from session state
-                mesh_simplify = st.session_state.get('simplify_single', 0.95)
-                texture_size = st.session_state.get('texture_single', 1024)
-                
-                export_params = ExportParams(
-                    mesh_simplify=mesh_simplify,
-                    texture_size=texture_size
-                )
-                
-                glb_path, _ = GLBExporter.extract(generated_state, export_params)
-                StateManager.set_generated_glb(glb_path)
-                st.success("✅ 3D model complete!")
-                st.rerun()
-        
-        # 3D model viewer
-        if generated_glb:
-            st.success("✅ 3D Model Ready!")
-            
-            clear_glb = show_3d_model_viewer(
-                generated_glb,
-                show_clear=True,
-                clear_key="single_glb"
-            )
-            if clear_glb == "clear":
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
-                MemoryManager.cleanup_session_state(clear_all=False)
-                st.rerun()
-            
-            # Download button
-            with open(generated_glb, "rb") as file:
-                st.download_button(
-                    label="📥 Download GLB",
-                    data=file,
-                    file_name="generated_model.glb",
-                    mime="model/gltf-binary",
-                    type="primary"
-                )
-        else:
-            # Show placeholder when no GLB
-            show_3d_model_viewer(None)
+        # Use shared output preview component
+        SingleImageUI._render_output_preview(
+            video_key="single_video",
+            glb_key="single_glb",
+            download_key="download_single",
+            simplify_key="simplify_single",
+            texture_key="texture_single"
+        )
     
     @staticmethod
     def _render_examples() -> None:
@@ -1165,8 +1186,6 @@ class MultiImageUI:
             if multi_uploaded_files and len(multi_uploaded_files) >= 2:
                 try:
                     StateManager.set_generating(True)
-                    # Reset video shown flag for new generation
-                    st.session_state[StateManager.VIDEO_SHOWN] = False
                     with st.spinner("Processing multiple images..."):
                         # Process uploaded images
                         images = [Image.open(f) for f in multi_uploaded_files]
@@ -1217,72 +1236,14 @@ class MultiImageUI:
         """Render the output column."""
         st.subheader("Output")
         
-        # Video preview
-        with st.container():
-            clear_video = show_video_preview(
-                StateManager.get_generated_video(),
-                show_clear=True,
-                clear_key="multi_video"
-            )
-            if clear_video == "clear":
-                StateManager.set_generated_video(None)
-                MemoryManager.cleanup_session_state(clear_all=False)
-                st.rerun()
-        
-        # Auto-extract GLB after video is shown (same pattern as single image)
-        generated_video = StateManager.get_generated_video()
-        generated_glb = StateManager.get_generated_glb()
-        generated_state = StateManager.get_generated_state()
-        
-        # Mark video as shown if it's being displayed
-        if generated_video:
-            st.session_state[StateManager.VIDEO_SHOWN] = True
-        
-        # Only extract GLB if video has been shown at least once
-        if generated_video and not generated_glb and generated_state and st.session_state.get(StateManager.VIDEO_SHOWN, False):
-            with st.spinner("Extracting GLB..."):
-                # Get export parameters from session state
-                mesh_simplify = st.session_state.get('simplify_multi', 0.95)
-                texture_size = st.session_state.get('texture_multi', 1024)
-                
-                export_params = ExportParams(
-                    mesh_simplify=mesh_simplify,
-                    texture_size=texture_size
-                )
-                
-                glb_path, _ = GLBExporter.extract(generated_state, export_params)
-                StateManager.set_generated_glb(glb_path)
-                st.success("✅ 3D model complete!")
-                st.rerun()
-        
-        # 3D model viewer
-        if generated_glb:
-            st.success("✅ Multi-View 3D Model Ready!")
-            
-            clear_glb = show_3d_model_viewer(
-                generated_glb,
-                show_clear=True,
-                clear_key="multi_glb"
-            )
-            if clear_glb == "clear":
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
-                MemoryManager.cleanup_session_state(clear_all=False)
-                st.rerun()
-            
-            # Download button
-            with open(generated_glb, "rb") as file:
-                st.download_button(
-                    label="📥 Download GLB",
-                    data=file,
-                    file_name="multi_view_model.glb",
-                    mime="model/gltf-binary",
-                    type="primary",
-                    key="download_multi"
-                )
-        else:
-            # Show placeholder when no GLB
-            show_3d_model_viewer(None)
+        # Use shared output preview component (same as single image)
+        SingleImageUI._render_output_preview(
+            video_key="multi_video",
+            glb_key="multi_glb",
+            download_key="download_multi",
+            simplify_key="simplify_multi",
+            texture_key="texture_multi"
+        )
 
 
 # ============================================================================
