@@ -29,8 +29,8 @@ accelerate==1.2.1
 # flash-attn will be installed separately in Dockerfile with fallback logic
 # https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
-# diff-gaussian-rasterization is always built from git source in Dockerfile for CUDA compatibility
-# https://github.com/graphdeco-inria/differentiable-gaussian-rasterization
+# diff-gaussian-rasterization wheel is downloaded in Dockerfile if not present locally
+# https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl?download=true
 
 # nvdiffrast is built from source in extensions/ directory in Dockerfile
 # https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl?download=true

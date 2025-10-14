@@ -1,10 +1,10 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.6
 
 # =============================================================================
 # Build Configuration Variables
 # =============================================================================
 # You can override these at build time using --build-arg
-# 
+#
 # Example:
 #   docker build \
 #     --build-arg CUDA_VERSION=12.3.2 \
@@ -68,55 +68,75 @@ WORKDIR /app
 
 # Install system dependencies and Python
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
+set -e
+apt-get update
+apt-get install -y --no-install-recommends \
     git \
     python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-dev \
     python3-pip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential
+rm -rf /var/lib/apt/lists/*
+EOF
 
 # Upgrade pip and install poetry
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip setuptools wheel && \
-    pip install poetry==${POETRY_VERSION}
+RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+set -e
+pip install --upgrade pip setuptools wheel
+pip install poetry==${POETRY_VERSION}
+EOF
 
 # Configure poetry
-RUN poetry config virtualenvs.create false && \
-    poetry config installer.max-workers 10
+RUN <<EOF
+set -e
+poetry config virtualenvs.create false
+poetry config installer.max-workers 10
+EOF
 
 # Copy dependency files (including poetry.lock if it exists)
 COPY pyproject.toml poetry.lock* ./
 COPY extensions/ ./extensions/
 
-# Install application dependencies. We keep this separate from the other dependencies to 
+# Install application dependencies. We keep this separate from the other dependencies to
 # avoid re-installing the same dependencies if kaolin fails to install.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --only main --no-interaction --no-ansi
+    --mount=type=cache,target=/root/.cache/pypoetry <<EOF
+set -e
+poetry install --only main --no-interaction --no-ansi
+EOF
 
 # Install Kaolin from NVIDIA's repository
-RUN --mount=type=cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+set -e
+pip install --no-cache-dir \
+    --find-links ${KAOLIN_INDEX_URL} \
+    kaolin==${KAOLIN_VERSION}
+EOF
+
+# Install flash-attention
+RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+set -e
+if pip install --no-cache-dir flash-attn; then
+    echo "Flash attention wheel installed successfully"
+else
+    echo "Flash attention wheel not available, attempting source build..."
+    pip install --no-cache-dir flash-attention
+fi
+EOF
+
+# Install diff-gaussian-rasterization (download wheel if not present locally)
+RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+set -e
+if [ -f "wheels/diff_gaussian_rasterization-*.whl" ]; then
+    echo "Installing diff-gaussian-rasterization from local wheel..."
+    pip install --no-cache-dir wheels/diff_gaussian_rasterization-*.whl
+else
+    echo "Local wheel not found, downloading from HuggingFace..."
     pip install --no-cache-dir \
-        --find-links ${KAOLIN_INDEX_URL} \
-        kaolin==${KAOLIN_VERSION}
-
-# Install flash-attention (try wheel first, fallback to source build)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    if [ "${FORCE_BUILD_FLASH_ATTN:-false}" = "true" ]; then \
-        echo "Forcing flash-attention source build..."; \
-        pip install --no-cache-dir flash-attention; \
-    else \
-        pip install --no-cache-dir flash-attn || \
-        (echo "Flash attention wheel not available, attempting source build..." && \
-         pip install --no-cache-dir flash-attention); \
-    fi
-
-# Install diff-gaussian-rasterization from source (ensures CUDA compatibility)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    echo "Building diff-gaussian-rasterization from source..."; \
-    pip install --no-cache-dir git+https://github.com/graphdeco-inria/differentiable-gaussian-rasterization.git
+        https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl?download=true
+fi
+EOF
 
 # Build and install nvdiffrast from source (ensures CUDA compatibility)
 # Set TORCH_CUDA_ARCH_LIST to compile for common GPU architectures
@@ -125,11 +145,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # 8.0,8.6 = Ampere (A100, RTX 3090)
 # 8.9 = Ada Lovelace (RTX 4090)
 # 9.0 = Hopper (H100)
-ARG TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0"
-RUN --mount=type=cache,target=/root/.cache/pip \
-    TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
-    cd extensions/nvdiffrast && \
-    pip install --no-cache-dir .
+RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+set -e
+cd extensions/nvdiffrast
+TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" pip install --no-cache-dir .
+EOF
 
 # =============================================================================
 # Runtime Stage
@@ -165,13 +185,16 @@ WORKDIR /app
 
 # Install only runtime dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
+set -e
+apt-get update
+apt-get install -y --no-install-recommends \
     python${PYTHON_VERSION} \
     python3-pip \
     git \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    libgomp1
+rm -rf /var/lib/apt/lists/*
+EOF
 
 # Copy Python packages from builder
 COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python${PYTHON_VERSION}/dist-packages
@@ -184,10 +207,13 @@ COPY assets/ ./assets/
 COPY app.py ./
 
 # Create non-root user for security
-RUN useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER} && \
-    chown -R ${APP_USER}:${APP_USER} /app && \
-    mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR} && \
-    chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+RUN <<EOF
+set -e
+useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER}
+chown -R ${APP_USER}:${APP_USER} /app
+mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+EOF
 
 USER ${APP_USER}
 

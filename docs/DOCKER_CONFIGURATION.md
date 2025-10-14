@@ -570,12 +570,12 @@ ls wheels/
 ./scripts/build.sh
 ```
 
-**Note**: `diff_gaussian_rasterization` is always built from source for CUDA compatibility.
+**Note**: `diff_gaussian_rasterization` uses pre-built wheels for CUDA compatibility.
 
 **Note on Package Installation**: The Dockerfile handles package installation with intelligent fallbacks:
 
 - **flash-attention**: Tries wheel first, falls back to source build from PyPI
-- **diff-gaussian-rasterization**: Always built from [GitHub source](https://github.com/graphdeco-inria/differentiable-gaussian-rasterization) for CUDA compatibility
+- **diff-gaussian-rasterization**: Uses local wheel if available, otherwise downloads from HuggingFace for CUDA compatibility
 - **nvdiffrast**: Always built from source in `extensions/` directory for CUDA compatibility
 
 This ensures maximum compatibility across different CUDA versions and hardware configurations.
