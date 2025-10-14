@@ -3,47 +3,69 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "trellis-3d-docker-image"
+name = "trellis-box"
 version = "0.1.0"
 description = "Trellis 3D generation with Streamlit interface"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Cassidy Bridges <cassidybridges@gmail.com>"]
 readme = "README.md"
 packages = [{include = "trellis"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
-streamlit = "1.40.1"
-streamlit-3d-model-viewer = "*"
+# Core dependencies with exact versions from working Docker container
 torch = "2.4.0"
 torchvision = "0.19.0"
-pillow = "10.4.0"
-imageio = "2.36.1"
-imageio-ffmpeg = "0.5.1"
-tqdm = "4.67.1"
-easydict = "1.13"
-opencv-python-headless = "4.10.0.84"
-scipy = "1.14.1"
-rembg = "2.0.60"
-onnxruntime = "1.20.1"
-trimesh = "4.5.3"
-xatlas = "0.0.9"
-pyvista = "0.44.2"
-pymeshfix = "0.17.0"
-igraph = "0.11.8"
-xformers = "0.0.27.post2"
-kaolin = {version = "0.17.0", source = "nvidia-kaolin"}
-spconv-cu120 = "2.3.6"
 transformers = "4.46.3"
 diffusers = "0.31.0"
 accelerate = "1.2.1"
+xformers = "0.0.27.post2"
+triton = "3.0.0"
+
+# NVIDIA/CUDA specific
+spconv-cu120 = "2.3.6"
+cumm-cu120 = "0.4.11"
+
+# Image processing
+pillow = "10.4.0"
+opencv-python-headless = "4.10.0.84"
+imageio = "2.36.1"
+imageio-ffmpeg = "0.5.1"
+rembg = "2.0.60"
+scikit-image = "0.25.2"
+
+# 3D processing
+trimesh = "4.5.3"
+pyvista = "0.44.2"
+pymeshfix = "0.17.0"
+xatlas = "0.0.9"
+vtk = "9.3.1"
+
+# Scientific computing
+numpy = "1.26.4"
+scipy = "1.14.1"
+matplotlib = "3.10.7"
+numba = "0.62.1"
+
+# Utilities
+tqdm = "4.67.1"
+easydict = "1.13"
+igraph = "0.11.8"
+onnxruntime = "1.20.1"
+huggingface-hub = "0.35.3"
+safetensors = "0.6.2"
+pyyaml = "6.0.3"
+
+# Streamlit (new interface)
+streamlit = "1.40.1"
 
 # Git dependencies
 utils3d = {git = "https://github.com/EasternJournalist/utils3d.git", rev = "9a4eb15e4021b67b12c460c7057d642626897ec8"}
 
-# Note: The following wheels need to be installed manually after poetry install:
+# Note: The following packages need to be installed manually after poetry install:
+# pip install kaolin==0.17.0
+# pip install wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl
+# pip install wheels/nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl
 # pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
-# pip install https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl?download=true
-# pip install https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl?download=true
 
 [tool.poetry.group.dev.dependencies]
 # Add any development dependencies here if needed

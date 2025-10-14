@@ -11,15 +11,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files (these change less frequently than source code)
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml ./
 COPY wheels/ ./wheels/
 
 # Install Poetry and Python dependencies
-# This layer will be cached unless pyproject.toml or poetry.lock change
+# This layer will be cached unless pyproject.toml changes
 RUN pip install --upgrade pip && \
     pip install poetry && \
     poetry config virtualenvs.create false && \
+    poetry lock && \
     poetry install --no-dev && \
+    # Install packages that aren't available via Poetry
+    pip install kaolin==0.17.0 && \
     # Install the wheel files manually
     pip install wheels/*.whl
 
