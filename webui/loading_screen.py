@@ -40,59 +40,34 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         display: flex;
         flex-direction: column;
         height: 100vh;
-        padding: 1rem !important;
+        padding: 0 !important;
+        max-width: 100% !important;
     }
     
-    /* First container - Terminal (grows to fill space) */
+    /* Header container */
+    .main .block-container > div:nth-child(1) {
+        flex-shrink: 0;
+    }
+    
+    /* Terminal container (grows to fill space) */
     .main .block-container > div:nth-child(2) {
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
         min-height: 0;
-        margin-bottom: 1rem;
         background: #0d1117;
-        border-radius: 8px;
-        border: 1px solid #30363d;
+        border-radius: 0;
+        border: none;
         overflow: hidden;
     }
     
-    /* Second container - Progress (stays at bottom) */
+    /* Progress container (stays at bottom) */
     .main .block-container > div:nth-child(3) {
         flex-shrink: 0;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Terminal header bar */
-    .terminal-header {
+        padding: 1.5rem 2rem;
         background: #161b22;
-        padding: 0.5rem 1rem;
-        border-bottom: 1px solid #30363d;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 0.85rem;
-        color: #8b949e;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-shrink: 0;
+        border-top: 1px solid #30363d;
     }
-    
-    .terminal-dots {
-        display: flex;
-        gap: 0.4rem;
-    }
-    
-    .terminal-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-    }
-    
-    .terminal-dot.red { background: #ff5f56; }
-    .terminal-dot.yellow { background: #ffbd2e; }
-    .terminal-dot.green { background: #27c93f; }
     
     /* Terminal content - the streamlit empty element */
     .main .block-container > div:nth-child(2) > div > div:last-child {
@@ -100,7 +75,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         display: flex;
         flex-direction: column;
         overflow-y: auto;
-        padding: 1rem;
+        padding: 1.5rem 2rem;
         min-height: 0;
     }
     
@@ -108,35 +83,35 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .main .block-container > div:nth-child(2) pre {
         flex: 1 1 auto;
         margin: 0 !important;
-        padding: 1rem !important;
+        padding: 1.5rem !important;
         background: #0d1117 !important;
         border: none !important;
-        border-radius: 0 !important;
-        font-family: 'Courier New', 'Consolas', monospace !important;
-        font-size: 0.85rem !important;
-        line-height: 1.5 !important;
-        color: #58a6ff !important;
+        border-radius: 8px !important;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace !important;
+        font-size: 0.875rem !important;
+        line-height: 1.6 !important;
+        color: #c9d1d9 !important;
         overflow-y: auto !important;
         min-height: 0 !important;
     }
     
     .main .block-container > div:nth-child(2) code {
-        color: #58a6ff !important;
+        color: #c9d1d9 !important;
         background: transparent !important;
     }
     
     /* Custom scrollbar for terminal */
     .main .block-container > div:nth-child(2) pre::-webkit-scrollbar {
-        width: 8px;
+        width: 10px;
     }
     
     .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-track {
-        background: #161b22;
+        background: #0d1117;
     }
     
     .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb {
         background: #30363d;
-        border-radius: 4px;
+        border-radius: 5px;
     }
     
     .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb:hover {
@@ -145,82 +120,114 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     </style>
     """, unsafe_allow_html=True)
     
-    # Glassmorphic overlay banner with GPU info
+    # Beautiful header banner with GPU info
     st.markdown(f"""
     <style>
-    @keyframes pulse {{
-        0%, 100% {{ opacity: 1; }}
-        50% {{ opacity: 0.8; }}
+    @keyframes fadeIn {{
+        from {{ opacity: 0; transform: translateY(-20px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
     }}
     
-    .glass-overlay {{
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 90%;
-        max-width: 840px;
-        padding: 2rem;
-        background: rgba(102, 126, 234, 0.15);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    @keyframes shimmer {{
+        0% {{ background-position: -1000px 0; }}
+        100% {{ background-position: 1000px 0; }}
+    }}
+    
+    .loading-header {{
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 3rem 2rem 2.5rem 2rem;
         text-align: center;
-        transition: all 0.5s ease;
-        cursor: pointer;
-        z-index: 9999;
+        position: relative;
+        overflow: hidden;
+        animation: fadeIn 0.6s ease-out;
     }}
     
-    .glass-overlay:hover {{
-        backdrop-filter: blur(5px);
-        -webkit-backdrop-filter: blur(5px);
-        background: rgba(102, 126, 234, 0.05);
+    .loading-header::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.1),
+            transparent
+        );
+        animation: shimmer 3s infinite;
+    }}
+    
+    .header-content {{
+        position: relative;
+        z-index: 1;
     }}
     
     .banner-image {{
-        max-width: 280px;
-        max-height: 280px;
+        max-width: 200px;
+        max-height: 200px;
         width: 100%;
         height: auto;
-        margin: 0 auto 1rem auto;
+        margin: 0 auto 1.5rem auto;
         display: block;
-        animation: pulse 2s ease-in-out infinite;
+        filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
         object-fit: contain;
     }}
     
-    .glass-overlay p {{
-        color: #333;
-        font-size: 0.88rem;
+    .loading-title {{
+        color: #ffffff;
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem 0;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        letter-spacing: -0.5px;
+    }}
+    
+    .loading-subtitle {{
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 1.1rem;
+        font-weight: 400;
+        margin: 0 0 1.5rem 0;
         line-height: 1.6;
-        margin-bottom: 0.8rem;
     }}
     
-    .gpu-info {{
-        font-size: 0.8rem;
-        color: #4a5568;
-        margin-top: 1.2rem;
-        padding: 0.6rem 1.2rem;
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 8px;
-        display: inline-block;
+    .gpu-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-radius: 50px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #ffffff;
+        font-size: 0.9rem;
         font-weight: 500;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     }}
     
-    .gpu-info strong {{
-        color: #667eea;
+    .gpu-icon {{
+        width: 20px;
+        height: 20px;
+        fill: currentColor;
     }}
     </style>
     
-    <div class="glass-overlay" onclick="this.style.opacity='0'; this.style.pointerEvents='none';">
-        {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS Banner">' if banner_img else '<h1 style="color: #667eea; font-size: 2.4rem; margin-bottom: 0.8rem;">TRELLIS</h1>'}
-        <p>
-            Initializing AI models and CUDA environment<br>
-            <strong>First run may take 2-5 minutes</strong>
-        </p>
-        <div class="gpu-info">
-            <strong>GPU:</strong> {gpu_info}
+    <div class="loading-header">
+        <div class="header-content">
+            {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS">' if banner_img else ''}
+            <h1 class="loading-title">TRELLIS Pipeline Initialization</h1>
+            <p class="loading-subtitle">
+                Loading AI models and CUDA environment<br>
+                <strong>First run may take 2-5 minutes</strong>
+            </p>
+            <div class="gpu-badge">
+                <svg class="gpu-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                </svg>
+                <span>{gpu_info}</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
