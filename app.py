@@ -758,75 +758,25 @@ if __name__ == "__main__":
         initial_sidebar_state="expanded"
     )
 
-    # GPU availability check with diagnostics
-    import subprocess
-    import os
+    # Simple GPU check
+    if not torch.cuda.is_available():
+        st.error("CUDA GPU not detected")
+        st.error("TRELLIS requires a CUDA-compatible GPU to run.")
+        st.info("If you're running this in Docker, ensure:")
+        st.code("• Docker has GPU access (--gpus all)")
+        st.code("• NVIDIA Container Toolkit is installed")
+        st.code("• Run: nvidia-smi (on host) to verify GPU")
+        st.stop()
 
-    # Check if NVIDIA GPU is available via nvidia-smi
-    nvidia_available = False
-    try:
-        result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=5)
-        nvidia_available = result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        nvidia_available = False
-
-    # Check PyTorch CUDA availability
-    pytorch_cuda_available = torch.cuda.is_available()
-
-    # Display diagnostic information
-    with st.expander("GPU Diagnostics", expanded=False):
-        st.write("**System Information:**")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("NVIDIA GPU Available", "Yes" if nvidia_available else "No")
-        with col2:
-            st.metric("PyTorch CUDA Available", "Yes" if pytorch_cuda_available else "No")
-
-        if nvidia_available:
-            st.code("nvidia-smi output:\n" + subprocess.run(['nvidia-smi'], capture_output=True, text=True).stdout[:500] + "...")
-
-        st.write("**Environment Variables:**")
-        cuda_vars = {k: v for k, v in os.environ.items() if 'CUDA' in k or 'NVIDIA' in k}
-        if cuda_vars:
-            st.json(cuda_vars)
-        else:
-            st.write("No CUDA/NVIDIA environment variables found")
-
-    # Main GPU check
-    if not pytorch_cuda_available:
-        if nvidia_available:
-            st.warning("NVIDIA GPU detected but PyTorch CUDA not available")
-            st.info("This may be due to:")
-            st.code("• PyTorch CUDA version mismatch")
-            st.code("• CUDA runtime/driver version incompatibility")
-            st.code("• Environment variable issues")
-            st.code("• Container GPU passthrough problems")
-
-            # Try to continue anyway
-            if st.button("Continue Anyway (May Fail)"):
-                st.warning("Proceeding without CUDA support. Performance will be severely degraded.")
-            else:
-                st.stop()
-        else:
-            st.error("No CUDA-compatible GPU detected")
-            st.error("TRELLIS requires a CUDA-compatible GPU to run.")
-            st.info("Ensure:")
-            st.code("• NVIDIA GPU is installed")
-            st.code("• NVIDIA drivers are installed")
-            st.code("• Docker has GPU access (--gpus all)")
-            st.code("• NVIDIA Container Toolkit is installed")
-            st.stop()
-
-    # Show CUDA info if available
-    if pytorch_cuda_available:
-        gpu_count = torch.cuda.device_count()
-        if gpu_count > 0:
-            current_device = torch.cuda.current_device()
-            gpu_name = torch.cuda.get_device_name(current_device)
-            st.success(f"CUDA GPU available: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
-        else:
-            st.error("CUDA available but no GPUs accessible")
-            st.stop()
+    # Show CUDA info
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 0:
+        current_device = torch.cuda.current_device()
+        gpu_name = torch.cuda.get_device_name(current_device)
+        st.success(f"CUDA GPU available: {gpu_name} ({gpu_count} GPU{'s' if gpu_count > 1 else ''})")
+    else:
+        st.error("CUDA available but no GPUs accessible")
+        st.stop()
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
