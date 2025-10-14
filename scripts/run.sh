@@ -214,19 +214,40 @@ start_container() {
     print_status "GPU access: ${CUDA_VISIBLE_DEVICES:-all available}"
     print_status "================================"
 
-    # Create host directories with proper permissions
+    # Create host directories with proper ownership
+    # Note: If directories don't exist, Docker creates them as root during bind mount
+    # We create them here as the current user to avoid permission issues
     print_status "Creating and configuring host directories..."
+    
+    # Get current user's UID and GID
+    CURRENT_UID=$(id -u)
+    CURRENT_GID=$(id -g)
+    
+    # Create directories if they don't exist
     mkdir -p "$OUTPUTS_HOST_DIR"
     mkdir -p "$HOST_CACHE_DIR"
     mkdir -p "$HOST_HF_CACHE_DIR"
     mkdir -p "$HOST_REMBG_CACHE_DIR"
     
-    # Set permissions to allow container to write (777 for maximum compatibility)
-    print_status "Setting directory permissions (777 for container write access)..."
-    chmod 777 "$OUTPUTS_HOST_DIR" 2>/dev/null || print_warning "Could not set permissions on $OUTPUTS_HOST_DIR"
-    chmod 777 "$HOST_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_CACHE_DIR"
-    chmod 777 "$HOST_HF_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_HF_CACHE_DIR"
-    chmod 777 "$HOST_REMBG_CACHE_DIR" 2>/dev/null || print_warning "Could not set permissions on $HOST_REMBG_CACHE_DIR"
+    # Fix ownership if directories are owned by root (common issue)
+    for dir in "$OUTPUTS_HOST_DIR" "$HOST_CACHE_DIR" "$HOST_HF_CACHE_DIR" "$HOST_REMBG_CACHE_DIR"; do
+        if [ -d "$dir" ]; then
+            DIR_OWNER=$(stat -c '%u' "$dir" 2>/dev/null || stat -f '%u' "$dir" 2>/dev/null)
+            if [ "$DIR_OWNER" = "0" ]; then
+                print_warning "Directory $dir is owned by root. Attempting to fix with sudo..."
+                if command -v sudo &> /dev/null; then
+                    sudo chown -R $CURRENT_UID:$CURRENT_GID "$dir" || print_warning "Could not change ownership of $dir"
+                    sudo chmod 755 "$dir" || print_warning "Could not change permissions of $dir"
+                else
+                    print_error "sudo not available. Please run: sudo chown -R $CURRENT_UID:$CURRENT_GID $dir"
+                    exit 1
+                fi
+            else
+                # Ensure it's writable by the owner
+                chmod 755 "$dir" 2>/dev/null || true
+            fi
+        fi
+    done
     
     print_status "Directory permissions configured"
 
