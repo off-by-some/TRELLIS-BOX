@@ -857,7 +857,7 @@ class SingleImageUI:
             if pipeline is not None:
                 with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                     processed_image = pipeline.preprocess_image(uploaded_image)
-                
+
                 # Show processed image
                 image_preview(
                     processed_image,
@@ -866,7 +866,7 @@ class SingleImageUI:
                     show_clear=False,
                     show_info=True
                 )
-                
+
                 # Store preview but clean up old reference first
                 if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
                     old_preview = st.session_state.processed_preview
@@ -1313,33 +1313,48 @@ class TrellisApp:
         """Initialize or load the TRELLIS pipeline."""
         # Initialize session state
         StateManager.initialize()
-        
+
         pipeline = StateManager.get_pipeline()
-        
+
         if pipeline is None:
             # Clean CUDA memory before loading
             if torch.cuda.is_available():
                 print("Clearing CUDA memory before pipeline initialization...")
                 MemoryManager.reduce_memory()
-            
+
             # Get GPU info
             gpu_info = self._check_gpu()
-            
+
             # Show loading screen
             from webui.loading_screen import capture_output
             progress_bar, status_text, console_output, start_time = show_loading_screen(gpu_info)
-            
+
             # Load the pipeline with captured output
             status_text.text("Loading TRELLIS pipeline...")
             progress_bar.progress(10)
-            
-            with capture_output(console_output):
-                pipeline = load_pipeline()
-            
-            StateManager.set_pipeline(pipeline)
-            
-            # Complete loading UI
-            finalize_loading(progress_bar, status_text, pipeline)
+
+            try:
+                with capture_output(console_output):
+                    pipeline = load_pipeline()
+
+                StateManager.set_pipeline(pipeline)
+
+                # Complete loading UI
+                finalize_loading(progress_bar, status_text, pipeline)
+                
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    # Handle OOM error gracefully
+                    progress_bar.progress(0)
+                    status_text.text("Error: Out of GPU memory")
+                    st.error("❌ Out of GPU Memory")
+                    st.error(str(e))
+                    st.warning("**Solution:** Please restart the application to clear GPU memory.")
+                    st.code("docker-compose restart", language="bash")
+                    st.info("If the problem persists, there may be other processes using GPU memory. Check with `nvidia-smi`")
+                    st.stop()
+                else:
+                    raise
     
     def run(self) -> None:
         """Run the main application."""
