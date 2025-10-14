@@ -366,9 +366,10 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.sparse_structure_sampler_params, **sampler_params}
         
-        # Sample sparse structure latent
+        # Sample sparse structure latent (only pass tensor arguments to model)
+        model_kwargs = {k: v for k, v in cond_typed.items() if hasattr(v, 'to') or isinstance(v, list)}
         z_s = self.sparse_structure_sampler.sample(
-            flow_model, noise, **cond_typed, **params, verbose=True
+            flow_model, noise, **model_kwargs, **params, verbose=True
         ).samples
         
         # Decode to binary occupancy grid and extract coordinates
@@ -510,9 +511,10 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.slat_sampler_params, **sampler_params}
         
-        # Sample latent features
+        # Sample latent features (only pass tensor arguments to model)
+        model_kwargs = {k: v for k, v in cond_typed.items() if hasattr(v, 'to') or isinstance(v, list)}
         slat = self.slat_sampler.sample(
-            flow_model, noise, **cond_typed, **params, verbose=True
+            flow_model, noise, **model_kwargs, **params, verbose=True
         ).samples
         
         # Denormalize latent features
