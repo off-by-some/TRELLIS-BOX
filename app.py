@@ -891,16 +891,15 @@ class SingleImageUI:
                 st.session_state.processed_preview = None
     
     @staticmethod
-    def _render_output_preview(video_key: str, glb_key: str, download_key: str, retry_key: str) -> None:
+    def _render_output_preview(video_key: str, glb_key: str, download_key: str) -> None:
         """
-        Render output preview section (video + GLB viewer + retry button).
+        Render output preview section (video + GLB viewer).
         This is a shared component used by both single and multi-image tabs.
         
         Args:
             video_key: Unique key for video clear button
             glb_key: Unique key for GLB clear button
             download_key: Unique key for download button
-            retry_key: Unique key for retry button
         """
         # Video preview
         with st.container():
@@ -974,15 +973,6 @@ class SingleImageUI:
                 st.success("✅ 3D model complete!")
                 st.rerun()
         
-        # Retry button (shown when video is available)
-        if generated_video and not is_generating:
-            if st.button("🔄 Regenerate with Current Settings", type="secondary", key=retry_key, use_container_width=True):
-                # Clear existing outputs to trigger regeneration
-                StateManager.set_generated_video(None)
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
-                st.info("Please click the Generate button again with your updated settings.")
-                st.rerun()
     
     @staticmethod
     def _render_output_column() -> None:
@@ -1023,9 +1013,13 @@ class SingleImageUI:
                 mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
                 texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
             
-            # Generate button
+            # Generate/Regenerate button
             is_generating = StateManager.is_generating()
-            if st.button("Generate 3D Model", type="primary", key="generate_single", use_container_width=True, disabled=is_generating):
+            has_generated = StateManager.get_generated_video() is not None
+            
+            button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
+            
+            if st.button(button_label, type="primary", key="generate_single", use_container_width=True, disabled=is_generating):
                 try:
                     StateManager.set_generating(True)
                     with st.spinner("Generating 3D model..."):
@@ -1076,8 +1070,7 @@ class SingleImageUI:
         SingleImageUI._render_output_preview(
             video_key="single_video",
             glb_key="single_glb",
-            download_key="download_single",
-            retry_key="retry_single"
+            download_key="download_single"
         )
     
     @staticmethod
@@ -1207,11 +1200,15 @@ class MultiImageUI:
                 mesh_simplify_multi = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_multi")
                 texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
             
-            # Generate button
+            # Generate/Regenerate button
             is_generating = StateManager.is_generating()
+            has_generated = StateManager.get_generated_video() is not None
             multi_disabled = len(multi_uploaded_files or []) < 2 or is_generating
+            
+            button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model from Multiple Views"
+            
             if st.button(
-                "Generate 3D Model from Multiple Views",
+                button_label,
                 type="primary",
                 disabled=multi_disabled,
                 key="generate_multi"
@@ -1273,8 +1270,7 @@ class MultiImageUI:
         SingleImageUI._render_output_preview(
             video_key="multi_video",
             glb_key="multi_glb",
-            download_key="download_multi",
-            retry_key="retry_multi"
+            download_key="download_multi"
         )
 
 
