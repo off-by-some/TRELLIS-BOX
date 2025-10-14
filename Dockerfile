@@ -117,7 +117,9 @@ EOF
 # Install flash-attention
 RUN --mount=type=cache,target=/root/.cache/pip <<EOF
 set -e
-if pip install --no-cache-dir flash-attn; then
+if pip install --no-cache-dir https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl; then
+    echo "Flash attention CUDA 12.3 wheel installed successfully"
+elif pip install --no-cache-dir flash-attn; then
     echo "Flash attention wheel installed successfully"
 else
     echo "Flash attention wheel not available, attempting source build..."

@@ -64,17 +64,17 @@ utils3d = {git = "https://github.com/EasternJournalist/utils3d.git", rev = "9a4e
 # pip install kaolin==0.17.0
 # pip install wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl
 # pip install wheels/nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl
-# pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+# pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
 
 [tool.poetry.group.dev.dependencies]
 # Add any development dependencies here if needed
 
 [[tool.poetry.source]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu121"
+url = "https://download.pytorch.org/whl/cu123"
 priority = "explicit"
 
 [[tool.poetry.source]]
 name = "nvidia-kaolin"
-url = "https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html"
+url = "https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu123.html"
 priority = "explicit"
