@@ -858,17 +858,22 @@ class SingleImageUI:
             st.markdown("**Uploaded Image:**")
             st.image(uploaded_image, use_container_width=True)
             
-            # Auto-process in background for generation
+            # Auto-process and show background-removed preview
             pipeline = StateManager.get_pipeline()
             if pipeline is not None:
                 with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                     processed_image = pipeline.preprocess_image(uploaded_image)
+                
+                st.markdown("**Background Removed (Auto):**")
+                st.image(processed_image, use_container_width=True)
+                
                 # Store preview but clean up old reference first
                 if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
                     old_preview = st.session_state.processed_preview
                     del old_preview
                 st.session_state.processed_preview = processed_image
             else:
+                st.info("Background removal preview will be shown after pipeline loads")
                 st.session_state.processed_preview = None
     
     @staticmethod
@@ -1236,6 +1241,18 @@ class MultiImageUI:
                 for i, uploaded_file in enumerate(multi_uploaded_files):
                     image = Image.open(uploaded_file)
                     st.image(image, caption=f"Image {i+1}", use_container_width=True)
+                
+                # Auto-process and show background-removed previews
+                pipeline = StateManager.get_pipeline()
+                if pipeline is not None:
+                    st.markdown("**Background Removed (Auto):**")
+                    with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                        for i, uploaded_file in enumerate(multi_uploaded_files):
+                            image = Image.open(uploaded_file)
+                            processed_image = pipeline.preprocess_image(image)
+                            st.image(processed_image, caption=f"Processed {i+1}", use_container_width=True)
+                else:
+                    st.info("Background removal preview will be shown after pipeline loads")
     
     @staticmethod
     def _render_output_column() -> None:
