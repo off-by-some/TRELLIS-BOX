@@ -236,18 +236,8 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     terminal_container = st.container()
     progress_container = st.container()
     
-    # Terminal with header
+    # Terminal output
     with terminal_container:
-        st.markdown("""
-        <div class="terminal-header">
-            <div class="terminal-dots">
-                <div class="terminal-dot red"></div>
-                <div class="terminal-dot yellow"></div>
-                <div class="terminal-dot green"></div>
-            </div>
-            <span>TRELLIS Pipeline Initialization</span>
-        </div>
-        """, unsafe_allow_html=True)
         console_output = st.empty()
     
     # Progress indicators at the bottom
