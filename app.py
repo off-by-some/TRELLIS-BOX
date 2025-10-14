@@ -1198,17 +1198,6 @@ class MultiImageUI:
                         
                         StateManager.set_generated_video(video_path)
                         StateManager.set_generated_state(state)
-                        
-                        st.success("Multi-view 3D model video generated! Extracting GLB...")
-                        
-                        # Auto-extract GLB after video generation
-                        export_params = ExportParams(
-                            mesh_simplify=mesh_simplify_multi,
-                            texture_size=texture_size_multi
-                        )
-                        glb_path, _ = GLBExporter.extract(state, export_params)
-                        StateManager.set_generated_glb(glb_path)
-                        st.success("✅ Multi-view 3D model complete!")
                 except Exception as e:
                     st.error(f"❌ Generation failed: {str(e)}")
                     st.warning("Try reducing image size or restarting the application if memory errors persist.")
@@ -1236,9 +1225,28 @@ class MultiImageUI:
                 MemoryManager.cleanup_session_state(clear_all=False)
                 st.rerun()
         
-        # 3D model viewer
+        # Auto-extract GLB after video is shown (same pattern as single image)
+        generated_video = StateManager.get_generated_video()
         generated_glb = StateManager.get_generated_glb()
+        generated_state = StateManager.get_generated_state()
         
+        if generated_video and not generated_glb and generated_state:
+            with st.spinner("Extracting GLB..."):
+                # Get export parameters from session state
+                mesh_simplify = st.session_state.get('simplify_multi', 0.95)
+                texture_size = st.session_state.get('texture_multi', 1024)
+                
+                export_params = ExportParams(
+                    mesh_simplify=mesh_simplify,
+                    texture_size=texture_size
+                )
+                
+                glb_path, _ = GLBExporter.extract(generated_state, export_params)
+                StateManager.set_generated_glb(glb_path)
+                st.success("✅ 3D model complete!")
+                st.rerun()
+        
+        # 3D model viewer
         if generated_glb:
             st.success("✅ Multi-View 3D Model Ready!")
             

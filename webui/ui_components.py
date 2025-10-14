@@ -106,19 +106,7 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        # Workaround for Streamlit duplicate video element IDs
-        # When the same video file is shown in multiple tabs, Streamlit generates duplicate IDs
-        # Solution: Use different rendering approaches based on clear_key
-        
-        if clear_key == "single_video":
-            # Single image tab: use direct file path
-            st.video(video_path, loop=True, autoplay=True)
-        else:
-            # Multi image tab: use bytes to force different rendering
-            with open(video_path, 'rb') as f:
-                video_bytes = f.read()
-            st.video(video_bytes, loop=True, autoplay=True)
-        
+        st.video(video_path, loop=True, autoplay=True)
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
