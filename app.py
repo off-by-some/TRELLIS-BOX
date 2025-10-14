@@ -574,37 +574,41 @@ def main():
                     st.info("Background removal preview will be shown after pipeline loads")
                     st.session_state.processed_preview = None
 
-            with st.expander("Generation Settings", expanded=False):
-                seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
-                randomize_seed_single = st.checkbox("Randomize Seed", value=True, key="randomize_single")
-                use_refinement_single = st.checkbox(
-                    "Image Refinement (SD-XL)",
-                    value=False,
-                    help="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)",
-                    key="refinement_single"
-                )
+        with col2:
+            st.subheader("Output")
+            
+            # Only show generation settings if an image is uploaded
+            if st.session_state.uploaded_image is not None:
+                with st.expander("Generation Settings", expanded=True):
+                    seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
+                    randomize_seed_single = st.checkbox("Randomize Seed", value=True, key="randomize_single")
+                    use_refinement_single = st.checkbox(
+                        "Image Refinement (SD-XL)",
+                        value=False,
+                        help="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)",
+                        key="refinement_single"
+                    )
 
-                st.markdown("**Stage 1: Sparse Structure Generation**")
-                ss_col1, ss_col2 = st.columns(2)
-                with ss_col1:
-                    ss_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_single")
-                with ss_col2:
-                    ss_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_single")
+                    st.markdown("**Stage 1: Sparse Structure Generation**")
+                    ss_col1, ss_col2 = st.columns(2)
+                    with ss_col1:
+                        ss_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_single")
+                    with ss_col2:
+                        ss_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_single")
 
-                st.markdown("**Stage 2: Structured Latent Generation**")
-                slat_col1, slat_col2 = st.columns(2)
-                with slat_col1:
-                    slat_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_single")
-                with slat_col2:
-                    slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
+                    st.markdown("**Stage 2: Structured Latent Generation**")
+                    slat_col1, slat_col2 = st.columns(2)
+                    with slat_col1:
+                        slat_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_single")
+                    with slat_col2:
+                        slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
 
-            # GLB Export Settings (shown before generation)
-            with st.expander("GLB Export Settings", expanded=False):
-                mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
-                texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
+                # GLB Export Settings (shown before generation)
+                with st.expander("GLB Export Settings", expanded=False):
+                    mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
+                    texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
 
-            if st.button("Generate 3D Model", type="primary", key="generate_single"):
-                if st.session_state.uploaded_image is not None:
+                if st.button("Generate 3D Model", type="primary", key="generate_single", use_container_width=True):
                     with st.spinner("Generating 3D model..."):
                         # Use the auto-processed image from preview, or process it if preview failed
                         if st.session_state.get('processed_preview') is not None:
@@ -640,10 +644,7 @@ def main():
                         st.session_state.generated_glb = glb_path
                         st.success("✅ 3D model complete!")
                         st.rerun()
-
-        with col2:
-            st.subheader("Output")
-
+            
             # Video preview with clear button
             clear_video = show_video_preview(
                 st.session_state.generated_video,
