@@ -1,4 +1,5 @@
 from typing import *
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -100,7 +101,10 @@ class TrellisImageTo3DPipeline(Pipeline):
             # Remove background at full resolution for quality preservation
             input = input.convert('RGB')
             if getattr(self, 'rembg_session', None) is None:
-                self.rembg_session = rembg.new_session('u2net')
+                cache_dir = os.environ.get('U2NET_HOME', os.path.expanduser('~/.u2net'))
+                os.makedirs(cache_dir, exist_ok=True)
+                os.chmod(cache_dir, 0o755)
+                self.rembg_session = rembg.new_session('u2net', cache_dir=cache_dir)
             output = rembg.remove(input, session=self.rembg_session)
         
         # Find object bounding box from alpha channel
