@@ -28,6 +28,10 @@ ARG TORCH_VERSION=2.4.0
 ARG KAOLIN_VERSION=0.17.0
 ARG KAOLIN_INDEX_URL=https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html
 
+# CUDA Architecture List for compiling PyTorch extensions
+# Specify which GPU architectures to compile for (space-separated compute capabilities)
+ARG TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0"
+
 # Application Configuration
 ARG APP_USER=appuser
 ARG APP_UID=1000
@@ -55,6 +59,7 @@ ARG PYTHON_VERSION
 ARG POETRY_VERSION
 ARG KAOLIN_VERSION
 ARG KAOLIN_INDEX_URL
+ARG TORCH_CUDA_ARCH_LIST
 
 # Set working directory
 WORKDIR /app
@@ -101,7 +106,15 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir wheels/*.whl
 
 # Build and install nvdiffrast from source (ensures CUDA compatibility)
+# Set TORCH_CUDA_ARCH_LIST to compile for common GPU architectures
+# Format: "compute_capability1 compute_capability2 ..."
+# 7.0,7.5 = Volta/Turing (V100, RTX 2080)
+# 8.0,8.6 = Ampere (A100, RTX 3090)
+# 8.9 = Ada Lovelace (RTX 4090)
+# 9.0 = Hopper (H100)
+ARG TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0"
 RUN --mount=type=cache,target=/root/.cache/pip \
+    TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" \
     cd extensions/nvdiffrast && \
     pip install --no-cache-dir .
 

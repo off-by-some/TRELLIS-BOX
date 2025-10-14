@@ -71,6 +71,7 @@ docker build \
 | `TORCH_VERSION` | `2.4.0` | PyTorch version (for reference) |
 | `KAOLIN_VERSION` | `0.17.0` | NVIDIA Kaolin library version |
 | `KAOLIN_INDEX_URL` | `https://nvidia-kaolin...` | Kaolin pip index URL |
+| `TORCH_CUDA_ARCH_LIST` | `7.0 7.5 8.0 8.6 8.9 9.0` | GPU architectures to compile for |
 
 ### Application
 
