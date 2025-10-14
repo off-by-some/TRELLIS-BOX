@@ -45,7 +45,14 @@ services:
       - STREAMLIT_SERVER_PORT=${APP_PORT:-8501}
       - STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
       - STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
-      # Optional: Add any runtime environment variables here
+      # Cache directories - ensure models persist across container restarts
+      - CACHE_DIR=${CACHE_DIR:-/home/appuser/.cache}
+      - HF_HOME=${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+      - HUGGINGFACE_HUB_CACHE=${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+      - TRANSFORMERS_CACHE=${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
+      - U2NET_HOME=${REMBG_CACHE_DIR:-/app/rembg_cache}
+      - TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR:-/app/outputs}
+      # CUDA configuration
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
     deploy:
       resources:
