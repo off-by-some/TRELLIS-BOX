@@ -36,14 +36,14 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         50% {{ opacity: 0.8; }}
     }}
     
-    .loading-container {
+    .loading-container {{
         position: relative;
         width: 100%;
         margin: 2rem auto;
         max-width: 1200px;
-    }
+    }}
     
-    .glass-overlay {
+    .glass-overlay {{
         position: relative;
         width: 100%;
         padding: 3rem;
@@ -57,43 +57,43 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         transition: all 0.5s ease;
         cursor: pointer;
         margin-bottom: 2rem;
-    }
+    }}
     
-    .glass-overlay:hover {
+    .glass-overlay:hover {{
         backdrop-filter: blur(5px);
         -webkit-backdrop-filter: blur(5px);
         background: rgba(102, 126, 234, 0.05);
-    }
+    }}
     
-    .glass-overlay h1 {
+    .glass-overlay h1 {{
         color: #667eea;
         font-size: 3rem;
         margin-bottom: 1rem;
         font-weight: 700;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-    }
+    }}
     
-    .glass-overlay h2 {
+    .glass-overlay h2 {{
         color: #764ba2;
         font-size: 1.8rem;
         margin-bottom: 1.5rem;
         font-weight: 500;
-    }
+    }}
     
-    .glass-overlay p {
+    .glass-overlay p {{
         color: #333;
         font-size: 1.1rem;
         line-height: 1.6;
         margin-bottom: 1rem;
-    }
+    }}
     
-    .loading-icon {
+    .loading-icon {{
         font-size: 4rem;
         animation: pulse 2s ease-in-out infinite;
         margin: 1rem 0;
-    }
+    }}
     
-    .gpu-info {
+    .gpu-info {{
         font-size: 1rem;
         color: #4a5568;
         margin-top: 1.5rem;
@@ -102,7 +102,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         border-radius: 10px;
         display: inline-block;
         font-weight: 500;
-    }
+    }}
     
     .gpu-info strong {{
         color: #667eea;
