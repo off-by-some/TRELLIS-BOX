@@ -11,13 +11,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files (these change less frequently than source code)
-COPY requirements.txt ./
+COPY pyproject.toml poetry.lock ./
 COPY wheels/ ./wheels/
 
-# Install Python dependencies
-# This layer will be cached unless requirements.txt or wheels/ change
+# Install Poetry and Python dependencies
+# This layer will be cached unless pyproject.toml or poetry.lock change
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install poetry && \
+    poetry config virtualenvs.create false && \
+    poetry install --no-dev && \
+    # Install the wheel files manually
+    pip install wheels/*.whl
 
 # Copy source code last (these change most frequently)
 # Changes here won't invalidate the dependency installation cache
@@ -26,8 +30,8 @@ COPY extensions/ ./extensions/
 COPY assets/ ./assets/
 COPY app.py ./
 
-# Expose the port Gradio will use
-EXPOSE 7860
+# Expose the port Streamlit will use
+EXPOSE 8501
 
-# Command to run the Gradio app
-CMD ["python3", "app.py"]
+# Command to run the Streamlit app
+CMD ["streamlit", "run", "app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]

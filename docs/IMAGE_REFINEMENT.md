@@ -1,6 +1,6 @@
 # Image Refinement Feature
 
-TRELLIS-BOX now includes optional image refinement using Stable Diffusion XL Refiner to enhance input image quality before 3D generation.
+TRELLIS-BOX includes optional image refinement using Stable Diffusion XL Refiner to enhance input image quality before 3D generation.
 
 ## What It Does
 

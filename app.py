@@ -1,8 +1,8 @@
-import gradio as gr
-import spaces
-from gradio_litmodel3d import LitModel3D
+import streamlit as st
+import streamlit.components.v1 as components
 
 import os
+import base64
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads - conservative but effective settings
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,garbage_collection_threshold:0.8'
@@ -341,7 +341,6 @@ def unpack_state(state: dict) -> Tuple[Gaussian, edict, str]:
     return gs, mesh, state['trial_id']
 
 
-@spaces.GPU
 def image_to_3d(trial_id: str, seed: int, randomize_seed: bool, ss_guidance_strength: float, ss_sampling_steps: int, slat_guidance_strength: float, slat_sampling_steps: int) -> Tuple[dict, str]:
     """
     Convert a single image to a 3D model.
@@ -427,7 +426,6 @@ def image_to_3d(trial_id: str, seed: int, randomize_seed: bool, ss_guidance_stre
     return state, video_path
 
 
-@spaces.GPU
 def images_to_3d(trial_id: str, num_images: int, batch_size: int, seed: int, randomize_seed: bool, ss_guidance_strength: float, ss_sampling_steps: int, slat_guidance_strength: float, slat_sampling_steps: int) -> Tuple[dict, str]:
     """
     Convert multiple images to a 3D model using multi-view conditioning.
@@ -552,7 +550,6 @@ def images_to_3d(trial_id: str, num_images: int, batch_size: int, seed: int, ran
     return state, video_path
 
 
-@spaces.GPU
 def extract_glb(state: dict, mesh_simplify: float, texture_size: int) -> Tuple[str, str]:
     """
     Extract a GLB file from the 3D model.
@@ -590,206 +587,290 @@ def extract_glb(state: dict, mesh_simplify: float, texture_size: int) -> Tuple[s
     return glb_path, glb_path
 
 
-def activate_button() -> gr.Button:
-    return gr.Button(interactive=True)
+# Streamlit doesn't need button activation/deactivation functions
 
 
-def deactivate_button() -> gr.Button:
-    return gr.Button(interactive=False)
-
-
-with gr.Blocks() as demo:
-    gr.Markdown("""
-    ## Image to 3D Asset with [TRELLIS](https://trellis3d.github.io/)
+def main():
+    st.title("Image to 3D Asset with TRELLIS")
+    st.markdown("""
     * **Single Image**: Upload one image for standard 3D generation
     * **Multi-Image**: Upload 2-4 images from different views for enhanced 3D reconstruction
     * If images have alpha channels, they'll be used as masks. Otherwise, we use `rembg` to remove backgrounds.
     """)
-    
-    # Shared state and output elements
-    output_buf = gr.State()
-    
-    with gr.Tabs():
-        # ===== Single Image Tab =====
-        with gr.Tab("Single Image"):
-            with gr.Row():
-                with gr.Column():
-                    image_prompt = gr.Image(label="Image Prompt", image_mode="RGBA", type="pil", height=300)
-                    
-                    with gr.Accordion(label="Generation Settings", open=False):
-                        seed_single = gr.Slider(0, MAX_SEED, label="Seed", value=0, step=1)
-                        randomize_seed_single = gr.Checkbox(label="Randomize Seed", value=True)
-                        use_refinement_single = gr.Checkbox(
-                            label="Image Refinement (SD-XL)", 
-                            value=False,
-                            info="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)"
-                        )
-                        gr.Markdown("Stage 1: Sparse Structure Generation")
-                        with gr.Row():
-                            ss_guidance_strength_single = gr.Slider(0.0, 10.0, label="Guidance Strength", value=7.5, step=0.1)
-                            ss_sampling_steps_single = gr.Slider(1, 50, label="Sampling Steps", value=12, step=1)
-                        gr.Markdown("Stage 2: Structured Latent Generation")
-                        with gr.Row():
-                            slat_guidance_strength_single = gr.Slider(0.0, 10.0, label="Guidance Strength", value=3.0, step=0.1)
-                            slat_sampling_steps_single = gr.Slider(1, 50, label="Sampling Steps", value=12, step=1)
 
-                    generate_btn_single = gr.Button("Generate 3D Model", variant="primary")
-                    
-                    with gr.Accordion(label="GLB Export Settings (Automatic)", open=False):
-                        gr.Markdown("*GLB export happens automatically after generation*")
-                        mesh_simplify_single = gr.Slider(0.9, 0.98, label="Simplify", value=0.95, step=0.01)
-                        texture_size_single = gr.Slider(512, 2048, label="Texture Size", value=1024, step=512)
-                    
-                    extract_glb_btn_single = gr.Button("Extract GLB", interactive=False)
+    # Initialize session state
+    if 'pipeline' not in st.session_state:
+        st.session_state.pipeline = None
+    if 'refiner' not in st.session_state:
+        st.session_state.refiner = None
+    if 'generated_video' not in st.session_state:
+        st.session_state.generated_video = None
+    if 'generated_glb' not in st.session_state:
+        st.session_state.generated_glb = None
+    
+    # Create tabs
+    tab1, tab2 = st.tabs(["Single Image", "Multi-Image"])
 
-                with gr.Column():
-                    video_output_single = gr.Video(label="Generated 3D Asset", autoplay=True, loop=True, height=300)
-                    model_output_single = LitModel3D(label="Extracted GLB", exposure=20.0, height=300)
-                    download_glb_single = gr.DownloadButton(label="Download GLB", interactive=False)
-            
-            trial_id_single = gr.Textbox(visible=False)
-            
-            # Examples for single image
-            with gr.Row():
-                examples_single = gr.Examples(
-                    examples=[f'assets/example_image/{image}' for image in os.listdir("assets/example_image")],
-                    inputs=[image_prompt],
-                    fn=preprocess_image,
-                    outputs=[trial_id_single, image_prompt],
-                    run_on_click=True,
-                    examples_per_page=64,
+    with tab1:
+        st.header("Single Image Generation")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Input")
+            uploaded_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"], key="single_image")
+
+            with st.expander("Generation Settings", expanded=False):
+                seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
+                randomize_seed_single = st.checkbox("Randomize Seed", value=True, key="randomize_single")
+                use_refinement_single = st.checkbox(
+                    "Image Refinement (SD-XL)",
+                    value=False,
+                    help="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)",
+                    key="refinement_single"
                 )
-        
-        # ===== Multi-Image Tab =====
-        with gr.Tab("Multi-Image"):
-            with gr.Row():
-                with gr.Column():
-                    gr.Markdown("Upload 2-4 images from different viewpoints for improved 3D reconstruction")
-                    multi_image_prompt = gr.Gallery(label="Image Prompts (2-4 images)", type="pil", height=300, columns=2)
-                    
-                    with gr.Accordion(label="Generation Settings", open=False):
-                        seed_multi = gr.Slider(0, MAX_SEED, label="Seed", value=0, step=1)
-                        randomize_seed_multi = gr.Checkbox(label="Randomize Seed", value=True)
-                        use_refinement_multi = gr.Checkbox(
-                            label="Image Refinement (SD-XL)", 
-                            value=False,
-                            info="Enhance input quality with Stable Diffusion XL (adds ~10s per image)"
+
+                st.markdown("**Stage 1: Sparse Structure Generation**")
+                ss_col1, ss_col2 = st.columns(2)
+                with ss_col1:
+                    ss_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_single")
+                with ss_col2:
+                    ss_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_single")
+
+                st.markdown("**Stage 2: Structured Latent Generation**")
+                slat_col1, slat_col2 = st.columns(2)
+                with slat_col1:
+                    slat_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_single")
+                with slat_col2:
+                    slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
+
+            if st.button("Generate 3D Model", type="primary", key="generate_single"):
+                if uploaded_file is not None:
+                    with st.spinner("Generating 3D model..."):
+                        # Process the uploaded image
+                        image = Image.open(uploaded_file)
+
+                        # Apply refinement if requested
+                        if use_refinement_single:
+                            st.info("Applying image refinement...")
+                            image = apply_image_refinement(image)
+
+                        # Preprocess image
+                        trial_id, processed_image = preprocess_image(image, use_refinement_single)
+
+                        # Generate 3D model
+                        state, video_path = image_to_3d(
+                            trial_id,
+                            seed_single if not randomize_seed_single else np.random.randint(0, MAX_SEED),
+                            randomize_seed_single,
+                            ss_guidance_strength_single,
+                            ss_sampling_steps_single,
+                            slat_guidance_strength_single,
+                            slat_sampling_steps_single
                         )
-                        batch_size_multi = gr.Slider(1, 4, label="Batch Size", value=2, step=1, info="Number of images processed at once (lower = less memory)")
-                        gr.Markdown("Stage 1: Sparse Structure Generation")
-                        with gr.Row():
-                            ss_guidance_strength_multi = gr.Slider(0.0, 10.0, label="Guidance Strength", value=7.5, step=0.1)
-                            ss_sampling_steps_multi = gr.Slider(1, 50, label="Sampling Steps", value=12, step=1)
-                        gr.Markdown("Stage 2: Structured Latent Generation")
-                        with gr.Row():
-                            slat_guidance_strength_multi = gr.Slider(0.0, 10.0, label="Guidance Strength", value=3.0, step=0.1)
-                            slat_sampling_steps_multi = gr.Slider(1, 50, label="Sampling Steps", value=12, step=1)
 
-                    generate_btn_multi = gr.Button("Generate 3D Model from Multiple Views", variant="primary")
-                    
-                    with gr.Accordion(label="GLB Export Settings (Automatic)", open=False):
-                        gr.Markdown("*GLB export happens automatically after generation*")
-                        mesh_simplify_multi = gr.Slider(0.9, 0.98, label="Simplify", value=0.95, step=0.01)
-                        texture_size_multi = gr.Slider(512, 2048, label="Texture Size", value=1024, step=512)
-                    
-                    extract_glb_btn_multi = gr.Button("Extract GLB", interactive=False)
+                        st.session_state.generated_video = video_path
+                        st.session_state.generated_state = state
 
-                with gr.Column():
-                    video_output_multi = gr.Video(label="Generated 3D Asset", autoplay=True, loop=True, height=300)
-                    model_output_multi = LitModel3D(label="Extracted GLB", exposure=20.0, height=300)
-                    download_glb_multi = gr.DownloadButton(label="Download GLB", interactive=False)
-            
-            trial_id_multi = gr.Textbox(visible=False)
-            num_images_multi = gr.Number(visible=False, value=0)
+                        st.success("3D model generated successfully!")
 
-    # ===== Single Image Handlers =====
-    image_prompt.upload(
-        preprocess_image,
-        inputs=[image_prompt, use_refinement_single],
-        outputs=[trial_id_single, image_prompt],
-        api_name=False,
-    )
-    
-    generate_btn_single.click(
-        image_to_3d,
-        inputs=[trial_id_single, seed_single, randomize_seed_single, ss_guidance_strength_single, ss_sampling_steps_single, slat_guidance_strength_single, slat_sampling_steps_single],
-        outputs=[output_buf, video_output_single],
-        api_name=False,
-    ).then(
-        extract_glb,  # Automatically extract GLB after video rendering
-        inputs=[output_buf, mesh_simplify_single, texture_size_single],
-        outputs=[model_output_single, download_glb_single],
-        api_name=False,
-    ).then(
-        activate_button,
-        outputs=[download_glb_single],
-        api_name=False,
-    )
+                        # Auto-extract GLB
+                        with st.expander("GLB Export Settings", expanded=False):
+                            mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
+                            texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
 
-    extract_glb_btn_single.click(
-        extract_glb,
-        inputs=[output_buf, mesh_simplify_single, texture_size_single],
-        outputs=[model_output_single, download_glb_single],
-        api_name=False,
-    ).then(
-        activate_button,
-        outputs=[download_glb_single],
-        api_name=False,
-    )
+                        if st.button("Extract GLB", key="extract_glb_single"):
+                            with st.spinner("Extracting GLB file..."):
+                                glb_path, _ = extract_glb(state, mesh_simplify_single, texture_size_single)
+                                st.session_state.generated_glb = glb_path
+                                st.success("GLB extracted successfully!")
 
-    # ===== Multi-Image Handlers =====
-    def process_multi_images(images, use_refinement=False):
-        if not images or len(images) < 2:
-            return None, [], 0
+        with col2:
+            st.subheader("Output")
 
-        # Limit to 4 images for memory safety (streaming processing)
-        max_images = 4
-        if len(images) > max_images:
-            print(f"Warning: Limiting to {max_images} images for memory safety (received {len(images)})")
-            images = images[:max_images]
+            if st.session_state.generated_video:
+                st.video(st.session_state.generated_video)
 
-        # Extract PIL images from gallery tuples (gallery returns list of tuples)
-        pil_images = [img[0] if isinstance(img, tuple) else img for img in images]
-        trial_id, processed = preprocess_images(pil_images, use_refinement=use_refinement)
-        return trial_id, processed, len(processed)
-    
-    multi_image_prompt.upload(
-        process_multi_images,
-        inputs=[multi_image_prompt, use_refinement_multi],
-        outputs=[trial_id_multi, multi_image_prompt, num_images_multi],
-        api_name=False,
-    )
-    
-    generate_btn_multi.click(
-        images_to_3d,
-        inputs=[trial_id_multi, num_images_multi, batch_size_multi, seed_multi, randomize_seed_multi, ss_guidance_strength_multi, ss_sampling_steps_multi, slat_guidance_strength_multi, slat_sampling_steps_multi],
-        outputs=[output_buf, video_output_multi],
-        api_name=False,
-    ).then(
-        extract_glb,  # Automatically extract GLB after video rendering
-        inputs=[output_buf, mesh_simplify_multi, texture_size_multi],
-        outputs=[model_output_multi, download_glb_multi],
-        api_name=False,
-    ).then(
-        activate_button,
-        outputs=[download_glb_multi],
-        api_name=False,
-    )
+            if st.session_state.generated_glb:
+                st.success("GLB file generated successfully!")
 
-    extract_glb_btn_multi.click(
-        extract_glb,
-        inputs=[output_buf, mesh_simplify_multi, texture_size_multi],
-        outputs=[model_output_multi, download_glb_multi],
-        api_name=False,
-    ).then(
-        activate_button,
-        outputs=[download_glb_multi],
-        api_name=False,
-    )
+                # Display 3D model using HTML embed
+                try:
+                    # Create a simple HTML viewer for GLB files
+                    glb_html = f"""
+                    <div style="width: 100%; height: 400px;">
+                        <model-viewer src="data:model/gltf-binary;base64,{base64.b64encode(open(st.session_state.generated_glb, 'rb').read()).decode()}"
+                                     camera-controls auto-rotate style="width: 100%; height: 100%;">
+                        </model-viewer>
+                        <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+                    </div>
+                    """
+                    components.html(glb_html, height=400)
+                except Exception as e:
+                    st.info("3D viewer not available. Download the GLB file to view in external 3D software.")
+
+                # Download button
+                with open(st.session_state.generated_glb, "rb") as file:
+                    st.download_button(
+                        label="Download GLB",
+                        data=file,
+                        file_name="generated_model.glb",
+                        mime="model/gltf-binary"
+                    )
+
+        # Examples
+        st.subheader("Examples")
+        example_cols = st.columns(4)
+        example_images = [f'assets/example_image/{img}' for img in os.listdir("assets/example_image")[:8]]
+
+        for i, example_path in enumerate(example_images):
+            with example_cols[i % 4]:
+                if st.button(f"Example {i+1}", key=f"example_{i}"):
+                    # Load and display example
+                    example_image = Image.open(example_path)
+                    st.session_state.current_image = example_image
+                    st.rerun()
+        
+    with tab2:
+        st.header("Multi-Image Generation")
+        st.markdown("Upload 2-4 images from different viewpoints for improved 3D reconstruction")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.subheader("Input")
+            multi_uploaded_files = st.file_uploader(
+                "Upload Images (2-4 images)",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True,
+                key="multi_images"
+            )
+
+            if multi_uploaded_files:
+                if len(multi_uploaded_files) < 2:
+                    st.warning("Please upload at least 2 images")
+                elif len(multi_uploaded_files) > 4:
+                    st.warning("Maximum 4 images allowed. Using first 4.")
+                    multi_uploaded_files = multi_uploaded_files[:4]
+
+                # Display uploaded images
+                if len(multi_uploaded_files) >= 2:
+                    image_cols = st.columns(min(len(multi_uploaded_files), 4))
+                    for i, uploaded_file in enumerate(multi_uploaded_files):
+                        with image_cols[i]:
+                            st.image(uploaded_file, caption=f"Image {i+1}", width=150)
+
+            with st.expander("Generation Settings", expanded=False):
+                seed_multi = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_multi")
+                randomize_seed_multi = st.checkbox("Randomize Seed", value=True, key="randomize_multi")
+                use_refinement_multi = st.checkbox(
+                    "Image Refinement (SD-XL)",
+                    value=False,
+                    help="Enhance input quality with Stable Diffusion XL (adds ~10s per image)",
+                    key="refinement_multi"
+                )
+                batch_size_multi = st.slider("Batch Size", 1, 4, 2, 1,
+                    help="Number of images processed at once (lower = less memory)", key="batch_size_multi")
+
+                st.markdown("**Stage 1: Sparse Structure Generation**")
+                ss_col1, ss_col2 = st.columns(2)
+                with ss_col1:
+                    ss_guidance_strength_multi = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_multi")
+                with ss_col2:
+                    ss_sampling_steps_multi = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_multi")
+
+                st.markdown("**Stage 2: Structured Latent Generation**")
+                slat_col1, slat_col2 = st.columns(2)
+                with slat_col1:
+                    slat_guidance_strength_multi = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_multi")
+                with slat_col2:
+                    slat_sampling_steps_multi = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_multi")
+
+            if st.button("Generate 3D Model from Multiple Views", type="primary",
+                        disabled=len(multi_uploaded_files or []) < 2, key="generate_multi"):
+                if multi_uploaded_files and len(multi_uploaded_files) >= 2:
+                    with st.spinner("Processing multiple images..."):
+                        # Process uploaded images
+                        images = [Image.open(f) for f in multi_uploaded_files]
+
+                        # Apply refinement if requested
+                        if use_refinement_multi:
+                            st.info("Applying image refinement to all images...")
+                            images = [apply_image_refinement(img) for img in images]
+
+                        # Preprocess images
+                        trial_id, processed_images = preprocess_images(images, use_refinement_multi)
+
+                        # Generate 3D model from multiple images
+                        state, video_path = images_to_3d(
+                            trial_id,
+                            len(processed_images),
+                            batch_size_multi,
+                            seed_multi if not randomize_seed_multi else np.random.randint(0, MAX_SEED),
+                            randomize_seed_multi,
+                            ss_guidance_strength_multi,
+                            ss_sampling_steps_multi,
+                            slat_guidance_strength_multi,
+                            slat_sampling_steps_multi
+                        )
+
+                        st.session_state.generated_video = video_path
+                        st.session_state.generated_state = state
+
+                        st.success("Multi-view 3D model generated successfully!")
+
+                        # GLB export settings
+                        with st.expander("GLB Export Settings", expanded=False):
+                            mesh_simplify_multi = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_multi")
+                            texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
+
+                        if st.button("Extract GLB", key="extract_glb_multi"):
+                            with st.spinner("Extracting GLB file..."):
+                                glb_path, _ = extract_glb(state, mesh_simplify_multi, texture_size_multi)
+                                st.session_state.generated_glb = glb_path
+                                st.success("GLB extracted successfully!")
+
+        with col2:
+            st.subheader("Output")
+
+            if st.session_state.generated_video:
+                st.video(st.session_state.generated_video)
+
+            if st.session_state.generated_glb:
+                st.success("GLB file generated successfully!")
+
+                # Display 3D model using HTML embed
+                try:
+                    # Create a simple HTML viewer for GLB files
+                    glb_html = f"""
+                    <div style="width: 100%; height: 400px;">
+                        <model-viewer src="data:model/gltf-binary;base64,{base64.b64encode(open(st.session_state.generated_glb, 'rb').read()).decode()}"
+                                     camera-controls auto-rotate style="width: 100%; height: 100%;">
+                        </model-viewer>
+                        <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+                    </div>
+                    """
+                    components.html(glb_html, height=400)
+                except Exception as e:
+                    st.info("3D viewer not available. Download the GLB file to view in external 3D software.")
+
+                # Download button
+                with open(st.session_state.generated_glb, "rb") as file:
+                    st.download_button(
+                        label="Download GLB",
+                        data=file,
+                        file_name="multi_view_model.glb",
+                        mime="model/gltf-binary",
+                        key="download_multi"
+                    )
+
     
 
 # Launch the Gradio app
-if __name__ == "__main__":
+# Initialize and cache the pipeline
+@st.cache_resource
+def load_pipeline():
+    """Load and configure the TRELLIS pipeline with memory optimizations."""
     print("Loading TRELLIS pipeline...")
 
     # Pre-optimize memory before loading large model
@@ -870,4 +951,20 @@ if __name__ == "__main__":
     reduce_memory_usage()
     print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
 
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    return pipeline
+
+# Launch the Streamlit app
+if __name__ == "__main__":
+    # Load the pipeline and store in session state
+    if 'pipeline' not in st.session_state:
+        st.session_state.pipeline = load_pipeline()
+
+    # Set global pipeline variable for compatibility with existing functions
+    global pipeline
+    pipeline = st.session_state.pipeline
+
+    # Load refiner if needed
+    if 'refiner' not in st.session_state:
+        st.session_state.refiner = None
+
+    main()
