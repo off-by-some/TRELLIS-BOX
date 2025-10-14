@@ -20,7 +20,7 @@ RUN pip install --upgrade pip && \
     pip install poetry && \
     poetry config virtualenvs.create false && \
     poetry lock && \
-    poetry install --no-dev && \
+    poetry install --only main && \
     # Install packages that aren't available via Poetry
     pip install kaolin==0.17.0 && \
     # Install the wheel files manually
