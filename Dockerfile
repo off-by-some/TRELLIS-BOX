@@ -7,7 +7,7 @@
 # 
 # Example:
 #   docker build \
-#     --build-arg CUDA_VERSION=12.4.1 \
+#     --build-arg CUDA_VERSION=12.3.2 \
 #     --build-arg PYTHON_VERSION=3.11 \
 #     --build-arg APP_PORT=8080 \
 #     --build-arg CACHE_DIR=/data/.cache \
@@ -17,7 +17,7 @@
 # See docker.env.example for all available configuration options
 # =============================================================================
 # CUDA and System
-ARG CUDA_VERSION=12.4.1
+ARG CUDA_VERSION=12.3.2
 ARG CUDNN_VERSION=9
 ARG UBUNTU_VERSION=22.04
 ARG PYTHON_VERSION=3.10

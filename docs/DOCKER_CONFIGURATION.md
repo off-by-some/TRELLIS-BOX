@@ -58,7 +58,7 @@ docker build \
 
 | Variable | Default | Description | Example Values |
 |----------|---------|-------------|----------------|
-| `CUDA_VERSION` | `12.4.1` | NVIDIA CUDA version | `12.4.1`, `12.5.1`, `12.6.0` |
+| `CUDA_VERSION` | `12.3.2` | NVIDIA CUDA version | `12.3.2`, `12.2.2`, `12.1.1` |
 | `CUDNN_VERSION` | `9` | cuDNN version | `8`, `9` |
 | `UBUNTU_VERSION` | `22.04` | Ubuntu base version | `20.04`, `22.04` |
 | `PYTHON_VERSION` | `3.10` | Python version | `3.10`, `3.11` |
@@ -166,14 +166,14 @@ ARG PYTHON_VERSION=3.11   # Change from 3.10
 
 ### Use Case 1: Different CUDA Version
 
-Your system has CUDA 12.6 instead of 12.4:
+Your system has CUDA 12.2.2 instead of 12.3.2:
 
 ```bash
 # Method A: Build script
-CUDA_VERSION=12.6.0 ./scripts/build.sh
+CUDA_VERSION=12.2.2 ./scripts/build.sh
 
 # Method B: Docker compose .env
-echo "CUDA_VERSION=12.6.0" >> .env
+echo "CUDA_VERSION=12.2.2" >> .env
 docker-compose build
 ```
 

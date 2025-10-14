@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       args:
         # Override these in .env file or here
-        CUDA_VERSION: ${CUDA_VERSION:-12.4.1}
+        CUDA_VERSION: ${CUDA_VERSION:-12.3.2}
         CUDNN_VERSION: ${CUDNN_VERSION:-9}
         UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
