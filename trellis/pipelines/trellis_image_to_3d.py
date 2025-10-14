@@ -90,7 +90,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         """
         # Resize images where either dimension exceeds 1024 to prevent OOM
         # Only resize if necessary, preserving original size for smaller images
-        max_dimension = 750
+        max_dimension = 728
         width, height = input.size
         
         if width > max_dimension or height > max_dimension:
