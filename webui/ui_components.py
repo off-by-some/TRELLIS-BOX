@@ -106,26 +106,18 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        # Use a unique container to avoid duplicate element IDs
-        # The key is to ensure each video element has a unique context
-        import hashlib
+        # Workaround for Streamlit duplicate video element IDs
+        # When the same video file is shown in multiple tabs, Streamlit generates duplicate IDs
+        # Solution: Use different rendering approaches based on clear_key
         
-        # Generate a stable unique identifier based on clear_key
-        video_hash = hashlib.md5(f"{clear_key}".encode()).hexdigest()[:8]
-        
-        # Create a unique key for this video in session state
-        video_state_key = f"_video_render_{clear_key}"
-        if video_state_key not in st.session_state:
-            st.session_state[video_state_key] = 0
-        
-        # Use a fragment-like approach with unique markdown separators
-        st.markdown(f'<div class="video-section" data-video-id="{video_hash}"></div>', unsafe_allow_html=True)
-        
-        # Read video as bytes to ensure unique content signature
-        with open(video_path, 'rb') as f:
-            video_bytes = f.read()
-        
-        st.video(video_bytes, loop=True, autoplay=True)
+        if clear_key == "single_video":
+            # Single image tab: use direct file path
+            st.video(video_path, loop=True, autoplay=True)
+        else:
+            # Multi image tab: use bytes to force different rendering
+            with open(video_path, 'rb') as f:
+                video_bytes = f.read()
+            st.video(video_bytes, loop=True, autoplay=True)
         
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
