@@ -13,35 +13,20 @@ warnings.filterwarnings("ignore", message=".*xFormers is available.*")
 warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*renamed.*")
 warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
-# CACHE banner image to prevent reloading on every refresh - CRITICAL for memory
-_BANNER_CACHE = None
 
-def _load_banner_image():
-    """Load and cache the banner image to prevent memory leaks on refresh."""
-    global _BANNER_CACHE
-    
-    if _BANNER_CACHE is not None:
-        return _BANNER_CACHE
-    
+def show_loading_screen(gpu_info="Unknown GPU"):
+    """Display the loading screen while initializing TRELLIS pipeline."""
     import base64
     from pathlib import Path
     
-    # Load and encode the banner image ONCE
+    # Load and encode the banner image
     banner_path = Path("docs/trellis-docker-image.png")
     if banner_path.exists():
         with open(banner_path, "rb") as f:
             banner_data = base64.b64encode(f.read()).decode()
-        _BANNER_CACHE = f'data:image/png;base64,{banner_data}'
+        banner_img = f'data:image/png;base64,{banner_data}'
     else:
-        _BANNER_CACHE = None
-    
-    return _BANNER_CACHE
-
-
-def show_loading_screen(gpu_info="Unknown GPU"):
-    """Display the loading screen while initializing TRELLIS pipeline."""
-    # Use cached banner image
-    banner_img = _load_banner_image()
+        banner_img = None
     
     # Hide default streamlit elements for cleaner loading screen
     st.markdown("""
@@ -157,45 +142,6 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb:hover {
         background: #484f58;
     }
-    
-    /* Style code blocks inside terminal container using :has() selector */
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre {
-        flex: 1 1 auto !important;
-        margin: 0 !important;
-        padding: 1rem !important;
-        background: #0d1117 !important;
-        border: none !important;
-        border-radius: 0 !important;
-        font-family: 'Courier New', 'Consolas', monospace !important;
-        font-size: 0.85rem !important;
-        line-height: 1.5 !important;
-        color: #58a6ff !important;
-        overflow-y: auto !important;
-        min-height: 0 !important;
-    }
-    
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) code {
-        color: #58a6ff !important;
-        background: transparent !important;
-    }
-    
-    /* Custom scrollbar for terminal using :has() selector */
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-track {
-        background: #161b22;
-    }
-    
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-thumb {
-        background: #30363d;
-        border-radius: 4px;
-    }
-    
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar-thumb:hover {
-        background: #484f58;
-    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -279,38 +225,6 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     </div>
     """, unsafe_allow_html=True)
     
-    # Add custom styling to identify containers
-    st.markdown("""
-    <style>
-    /* Target all direct children of block-container for proper layout */
-    .main .block-container > .element-container {
-        display: contents;
-    }
-    
-    /* Terminal container styling */
-    div[data-testid="stVerticalBlock"]:has(.terminal-header) {
-        flex: 1 1 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: 0 !important;
-        margin-bottom: 1rem !important;
-        background: #0d1117 !important;
-        border-radius: 8px !important;
-        border: 1px solid #30363d !important;
-        overflow: hidden !important;
-    }
-    
-    /* Progress container styling */
-    div[data-testid="stVerticalBlock"]:has(.stProgress) {
-        flex-shrink: 0 !important;
-        padding: 1rem !important;
-        background: rgba(255, 255, 255, 0.05) !important;
-        border-radius: 8px !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
     # Create containers for layout
     terminal_container = st.container()
     progress_container = st.container()
@@ -344,9 +258,8 @@ def capture_output(console_display):
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     
-    # Use lists to accumulate output with BOUNDED SIZE to prevent memory leaks
+    # Use lists to accumulate all output
     output_lines = []
-    MAX_LINES = 100  # Hard limit to prevent unbounded growth
     
     class TeeOutput:
         def __init__(self, original, output_lines, console_display):
@@ -354,7 +267,6 @@ def capture_output(console_display):
             self.output_lines = output_lines
             self.console_display = console_display
             self.current_line = ""
-            self.update_counter = 0  # Throttle display updates
             
         def write(self, text):
             self.original.write(text)
@@ -369,17 +281,12 @@ def capture_output(console_display):
                 # Add all complete lines (including empty ones for proper spacing)
                 for line in lines[:-1]:
                     self.output_lines.append(line)
-                    # CRITICAL FIX: Keep only last MAX_LINES to prevent memory leak
-                    if len(self.output_lines) > MAX_LINES:
-                        self.output_lines.pop(0)
-                
                 # Keep the last incomplete line
                 self.current_line = lines[-1]
                 
-                # THROTTLE updates: Only update display every 5 writes to reduce Streamlit element creation
-                self.update_counter += 1
-                if self.console_display and self.output_lines and self.update_counter % 5 == 0:
-                    # Show last 100 lines (but list is already bounded)
+                # Update display with accumulated output - like a real terminal
+                if self.console_display and self.output_lines:
+                    # Show last 100 lines (more than before for better context)
                     display_lines = self.output_lines[-100:]
                     
                     # Add current incomplete line if exists
@@ -402,27 +309,14 @@ def capture_output(console_display):
         sys.stderr = tee_err
         yield output_lines
     finally:
-        # CRITICAL: Final display update and cleanup
-        if console_display and output_lines:
-            display_text = '\n'.join(output_lines[-100:])
-            console_display.code(display_text, language='bash')
-        
         sys.stdout = old_stdout
         sys.stderr = old_stderr
-        
-        # Clear references to help garbage collection
-        output_lines.clear()
-        del tee_out
-        del tee_err
 
 
 def finalize_loading(progress_bar, status_text, pipeline):
     """Complete the loading UI after pipeline is loaded."""
-    # Handle None values for cleanup scenarios
-    if progress_bar is not None:
-        progress_bar.progress(100)
-    if status_text is not None:
-        status_text.text("Application ready")
+    progress_bar.progress(100)
+    status_text.text("Application ready")
     
     st.success("TRELLIS initialization completed")
     st.balloons()

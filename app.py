@@ -1317,15 +1317,9 @@ class TrellisApp:
         pipeline = StateManager.get_pipeline()
         
         if pipeline is None:
-            # CRITICAL: Aggressive cleanup before loading to prevent OOM on refresh
-            # This ensures any orphaned objects from previous sessions are cleaned up
+            # Clean CUDA memory before loading
             if torch.cuda.is_available():
                 print("Clearing CUDA memory before pipeline initialization...")
-                # Force multiple rounds of cleanup to ensure thorough memory release
-                for _ in range(2):
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-                    gc.collect()
                 MemoryManager.reduce_memory()
             
             # Get GPU info
@@ -1344,7 +1338,7 @@ class TrellisApp:
             
             StateManager.set_pipeline(pipeline)
             
-            # Complete loading UI (will call st.rerun() which cleans up everything)
+            # Complete loading UI
             finalize_loading(progress_bar, status_text, pipeline)
     
     def run(self) -> None:
