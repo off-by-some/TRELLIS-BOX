@@ -598,6 +598,11 @@ def main():
                 with slat_col2:
                     slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
 
+            # GLB Export Settings (shown before generation)
+            with st.expander("GLB Export Settings", expanded=False):
+                mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
+                texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
+
             if st.button("Generate 3D Model", type="primary", key="generate_single"):
                 if st.session_state.uploaded_image is not None:
                     with st.spinner("Generating 3D model..."):
@@ -628,18 +633,13 @@ def main():
                         st.session_state.generated_state = state
                         st.session_state.processed_image = processed_image
 
-                        st.success("3D model generated successfully!")
-
-                        # Auto-extract GLB
-                        with st.expander("GLB Export Settings", expanded=False):
-                            mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
-                            texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
-
-                        if st.button("Extract GLB", key="extract_glb_single"):
-                            with st.spinner("Extracting GLB file..."):
-                                glb_path, _ = extract_glb(state, mesh_simplify_single, texture_size_single)
-                                st.session_state.generated_glb = glb_path
-                                st.success("GLB extracted successfully!")
+                        st.success("3D model video generated! Extracting GLB...")
+                        
+                        # Auto-extract GLB after video generation
+                        glb_path, _ = extract_glb(state, mesh_simplify_single, texture_size_single)
+                        st.session_state.generated_glb = glb_path
+                        st.success("✅ 3D model complete!")
+                        st.rerun()
 
         with col2:
             st.subheader("Output")
@@ -687,9 +687,12 @@ def main():
         
         selected_example = show_example_gallery(example_images, columns=4)
         if selected_example:
-            # Load the selected example
+            # Load the selected example and clear all state
             st.session_state.uploaded_image = Image.open(selected_example)
             st.session_state.processed_preview = None
+            st.session_state.generated_video = None
+            st.session_state.generated_glb = None
+            st.session_state.generated_state = None
             st.rerun()
         
     with tab2:
@@ -749,6 +752,11 @@ def main():
                 with slat_col2:
                     slat_sampling_steps_multi = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_multi")
 
+            # GLB export settings (shown before generation)
+            with st.expander("GLB Export Settings", expanded=False):
+                mesh_simplify_multi = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_multi")
+                texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
+
             if st.button("Generate 3D Model from Multiple Views", type="primary",
                         disabled=len(multi_uploaded_files or []) < 2, key="generate_multi"):
                 if multi_uploaded_files and len(multi_uploaded_files) >= 2:
@@ -780,18 +788,13 @@ def main():
                         st.session_state.generated_video = video_path
                         st.session_state.generated_state = state
 
-                        st.success("Multi-view 3D model generated successfully!")
-
-                        # GLB export settings
-                        with st.expander("GLB Export Settings", expanded=False):
-                            mesh_simplify_multi = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_multi")
-                            texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
-
-                        if st.button("Extract GLB", key="extract_glb_multi"):
-                            with st.spinner("Extracting GLB file..."):
-                                glb_path, _ = extract_glb(state, mesh_simplify_multi, texture_size_multi)
-                                st.session_state.generated_glb = glb_path
-                                st.success("GLB extracted successfully!")
+                        st.success("Multi-view 3D model video generated! Extracting GLB...")
+                        
+                        # Auto-extract GLB after video generation
+                        glb_path, _ = extract_glb(state, mesh_simplify_multi, texture_size_multi)
+                        st.session_state.generated_glb = glb_path
+                        st.success("✅ Multi-view 3D model complete!")
+                        st.rerun()
 
         with col2:
             st.subheader("Output")

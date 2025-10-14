@@ -50,21 +50,25 @@ def create_placeholder_image(width=512, height=512, text="No Image"):
 
 def show_image_preview(image, title="Image", expanded=True, show_clear=False, clear_key=None):
     """Display an image preview with a nice UI."""
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        st.markdown(f"**{title}**")
-    with col2:
-        if show_clear and clear_key:
-            if st.button("✕", key=f"clear_{clear_key}", help="Clear image"):
-                return "clear"
     
+    # Create a container with title and clear button
+    col_title, col_clear = st.columns([5, 1])
+    with col_title:
+        st.markdown(f"**{title}**")
+    with col_clear:
+        clear_clicked = False
+        if show_clear and clear_key and image is not None:
+            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear image", use_container_width=True):
+                clear_clicked = True
+    
+    # Show image or placeholder
     if image is not None:
         st.image(image, use_container_width=True)
     else:
         placeholder = create_placeholder_image()
         st.image(placeholder, use_container_width=True)
     
-    return None
+    return "clear" if clear_clicked else None
 
 
 def create_placeholder_video():
@@ -90,25 +94,30 @@ def create_placeholder_video():
     return img
 
 
-def show_video_preview(video_path, show_clear=False, clear_key=None):
+def show_video_preview(video_path, show_clear=False, clear_key=None, show_progress=False, progress_text=None):
     """Display video preview with information."""
-    col1, col2 = st.columns([6, 1])
+    col1, col2 = st.columns([5, 1])
     with col1:
         st.markdown("### 🎬 3D Model Preview")
     with col2:
+        clear_clicked = False
         if show_clear and clear_key and video_path:
-            if st.button("✕", key=f"clear_{clear_key}", help="Clear video"):
-                return "clear"
+            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear video", use_container_width=True):
+                clear_clicked = True
     
     if video_path:
         st.video(video_path, loop=True, autoplay=True)
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
+        # Show placeholder with optional progress bar
         placeholder = create_placeholder_video()
         st.image(placeholder, use_container_width=True)
+        
+        if show_progress and progress_text:
+            st.progress(0.5, text=progress_text)
     
-    return None
+    return "clear" if clear_clicked else None
 
 
 def create_placeholder_glb():
@@ -153,18 +162,19 @@ def create_placeholder_glb():
     return img
 
 
-def show_3d_model_viewer(glb_path, show_clear=False, clear_key=None):
+def show_3d_model_viewer(glb_path, show_clear=False, clear_key=None, show_progress=False, progress_text=None):
     """Display interactive 3D model viewer."""
     import streamlit.components.v1 as components
     import base64
     
-    col1, col2 = st.columns([6, 1])
+    col1, col2 = st.columns([5, 1])
     with col1:
         st.markdown("### 🎯 Interactive 3D Viewer")
     with col2:
+        clear_clicked = False
         if show_clear and clear_key and glb_path:
-            if st.button("✕", key=f"clear_{clear_key}", help="Clear 3D model"):
-                return "clear"
+            if st.button("🗑️", key=f"clear_{clear_key}", help="Clear 3D model", use_container_width=True):
+                clear_clicked = True
     
     if glb_path:
         try:
@@ -184,13 +194,18 @@ def show_3d_model_viewer(glb_path, show_clear=False, clear_key=None):
             """
             components.html(glb_html, height=520)
             st.caption("🖱️ Click and drag to rotate • Scroll to zoom • Right-click and drag to pan")
-            return None
+            return "clear" if clear_clicked else None
         except Exception as e:
             st.warning("3D viewer not available. Download the GLB file to view in external 3D software.")
             return None
     else:
+        # Show placeholder with optional progress bar
         placeholder = create_placeholder_glb()
         st.image(placeholder, use_container_width=True)
+        
+        if show_progress and progress_text:
+            st.progress(0.5, text=progress_text)
+        
         return None
 
 
