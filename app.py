@@ -1318,6 +1318,38 @@ class TrellisApp:
         pipeline = StateManager.get_pipeline()
 
         if pipeline is None:
+            # Check if pipeline is already cached before showing loading screen
+            from webui.initialize_pipeline import _PIPELINE_SINGLETON
+            
+            if _PIPELINE_SINGLETON is not None:
+                # Pipeline already cached, show simple spinner
+                st.markdown("""
+                <style>
+                .spinner-container {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    gap: 1.5rem;
+                }
+                .spinner-text {
+                    font-size: 1.2rem;
+                    color: #667eea;
+                    font-weight: 500;
+                }
+                </style>
+                <div class="spinner-container">
+                    <div class="spinner-text">Loading TRELLIS...</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                print("Using cached pipeline from previous session")
+                pipeline = _PIPELINE_SINGLETON
+                StateManager.set_pipeline(pipeline)
+                st.rerun()
+            
+            # Pipeline not cached, show full loading screen
             # Clean CUDA memory before loading
             if torch.cuda.is_available():
                 print("Clearing CUDA memory before pipeline initialization...")
@@ -1335,17 +1367,8 @@ class TrellisApp:
             progress_bar.progress(10)
 
             try:
-                # First check if pipeline is already cached
-                from webui.initialize_pipeline import _PIPELINE_SINGLETON
-                
-                if _PIPELINE_SINGLETON is not None:
-                    # Pipeline already exists in cache, just use it
-                    print("Using cached pipeline from previous session")
-                    pipeline = _PIPELINE_SINGLETON
-                else:
-                    # Load new pipeline with output capture
-                    with capture_output(console_output):
-                        pipeline = load_pipeline()
+                with capture_output(console_output):
+                    pipeline = load_pipeline()
 
                 StateManager.set_pipeline(pipeline)
 
