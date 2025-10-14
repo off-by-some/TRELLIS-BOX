@@ -45,17 +45,103 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     /* Terminal area wrapper - grows to fill space */
     .terminal-wrapper {
-        flex-grow: 1;
+        flex: 1 1 auto;
         display: flex;
         flex-direction: column;
         min-height: 0;
         margin-bottom: 1rem;
+        background: #0d1117;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        overflow: hidden;
     }
     
-    /* Make streamlit elements inside terminal wrapper fill space */
-    .terminal-wrapper > div {
-        flex-grow: 1;
+    /* Terminal header bar */
+    .terminal-header {
+        background: #161b22;
+        padding: 0.5rem 1rem;
+        border-bottom: 1px solid #30363d;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 0.85rem;
+        color: #8b949e;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+    
+    .terminal-dots {
+        display: flex;
+        gap: 0.4rem;
+    }
+    
+    .terminal-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    
+    .terminal-dot.red { background: #ff5f56; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #27c93f; }
+    
+    /* Terminal content area */
+    .terminal-content {
+        flex: 1 1 auto;
         overflow-y: auto;
+        padding: 1rem;
+        background: #0d1117;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* Style the streamlit element inside terminal */
+    .terminal-content > div {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    /* Style code blocks inside terminal */
+    .terminal-content pre {
+        flex: 1 1 auto;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #0d1117 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        font-family: 'Courier New', 'Consolas', monospace !important;
+        font-size: 0.85rem !important;
+        line-height: 1.5 !important;
+        color: #58a6ff !important;
+        overflow-y: auto !important;
+        height: 100% !important;
+    }
+    
+    .terminal-content code {
+        color: #58a6ff !important;
+        background: transparent !important;
+    }
+    
+    .terminal-content::-webkit-scrollbar,
+    .terminal-content pre::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .terminal-content::-webkit-scrollbar-track,
+    .terminal-content pre::-webkit-scrollbar-track {
+        background: #161b22;
+    }
+    
+    .terminal-content::-webkit-scrollbar-thumb,
+    .terminal-content pre::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 4px;
+    }
+    
+    .terminal-content::-webkit-scrollbar-thumb:hover,
+    .terminal-content pre::-webkit-scrollbar-thumb:hover {
+        background: #484f58;
     }
     
     /* Progress area stays at bottom */
@@ -65,17 +151,6 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
         border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Style code blocks to look like terminal */
-    .terminal-wrapper pre {
-        background: #1a1a1a !important;
-        color: #00ff00 !important;
-        border: 1px solid #333 !important;
-        border-radius: 8px !important;
-        max-height: none !important;
-        height: 100% !important;
-        overflow-y: auto !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -161,12 +236,28 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     """, unsafe_allow_html=True)
     
     # Terminal output container (grows to fill space)
-    st.markdown('<div class="terminal-container">', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="terminal-wrapper">
+        <div class="terminal-header">
+            <div class="terminal-dots">
+                <div class="terminal-dot red"></div>
+                <div class="terminal-dot yellow"></div>
+                <div class="terminal-dot green"></div>
+            </div>
+            <span>TRELLIS Pipeline Initialization</span>
+        </div>
+        <div class="terminal-content">
+    """, unsafe_allow_html=True)
+    
     console_output = st.empty()
-    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("""
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Progress indicators at the bottom (fixed position)
-    st.markdown('<div class="progress-container">', unsafe_allow_html=True)
+    st.markdown('<div class="progress-wrapper">', unsafe_allow_html=True)
     progress_bar = st.progress(0)
     status_text = st.empty()
     st.markdown('</div>', unsafe_allow_html=True)
