@@ -680,6 +680,16 @@ class ModelGenerator:
         pipeline = StateManager.get_pipeline()
         with torch.inference_mode():
             cond = pipeline.get_cond(images)
+
+        # Display contradiction score for multi-view inputs
+        if cond.get('multi_view', False):
+            contradiction = cond.get('contradiction', 0.0)
+            if contradiction < 1.0:
+                st.success(f"Multi-view consistency: Good ({contradiction:.2f})")
+            elif contradiction < 3.0:
+                st.warning(f"Multi-view consistency: Moderate ({contradiction:.2f})")
+            else:
+                st.error(f"Multi-view consistency: Poor ({contradiction:.2f})")
         
         # Clean up images immediately
         del images

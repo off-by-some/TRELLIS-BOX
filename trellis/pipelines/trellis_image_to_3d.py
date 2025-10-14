@@ -15,6 +15,68 @@ from ..modules import sparse as sp
 from ..representations import Gaussian, Strivec, MeshExtractResult
 
 
+def _bhattacharyya_coefficient(p: torch.Tensor, q: torch.Tensor) -> float:
+    """
+    Compute Bhattacharyya coefficient between two probability distributions.
+
+    BC(p,q) = sum_i sqrt(p_i * q_i)
+
+    Args:
+        p, q: Probability distributions (will be normalized)
+
+    Returns:
+        Bhattacharyya coefficient in [0, 1]
+    """
+    # Normalize to probability distributions
+    p = p.flatten()
+    q = q.flatten()
+    p = p / p.sum()
+    q = q / q.sum()
+
+    # Compute BC
+    bc = torch.sum(torch.sqrt(p * q)).item()
+    return bc
+
+
+def _compute_contradiction_measure(cond_list: List[torch.Tensor]) -> float:
+    """
+    Compute contradiction measure K for multi-view conditioning.
+
+    Based on the mathematical theory of contradiction, we treat each conditioning
+    view as a different "context" and measure how much they contradict any
+    single global frame-independent model.
+
+    K = -log₂(min_{contexts} BC(p_i, p_j))
+
+    Args:
+        cond_list: List of conditioning tensors, each shape (1, num_patches, hidden_dim)
+
+    Returns:
+        Contradiction measure K in [0, ∞), where 0 = perfect consistency
+    """
+    if len(cond_list) < 2:
+        return 0.0  # Single view has no contradiction
+
+    min_bc = float('inf')
+
+    # Compute pairwise BC between all conditioning views
+    for i in range(len(cond_list)):
+        for j in range(i + 1, len(cond_list)):
+            # Treat conditioning tensors as distributions over patch tokens
+            # Normalize each conditioning tensor to sum to 1
+            p = F.softmax(cond_list[i].flatten(), dim=0)
+            q = F.softmax(cond_list[j].flatten(), dim=0)
+
+            bc = torch.sum(torch.sqrt(p * q)).item()
+            min_bc = min(min_bc, bc)
+
+    # Apply weakest link principle: contradiction determined by most inconsistent pair
+    if min_bc <= 0:
+        return float('inf')  # Complete contradiction
+
+    return -np.log2(min_bc)
+
+
 class TrellisImageTo3DPipeline(Pipeline):
     """
     Pipeline for inferring Trellis image-to-3D models.
@@ -201,13 +263,14 @@ class TrellisImageTo3DPipeline(Pipeline):
             image: Single image or list of images for multi-view conditioning.
 
         Returns:
-            dict: Conditioning dictionary with 'cond' and 'neg_cond' keys.
-                Single image: cond shape (1, num_patches, hidden_dim)
+            dict: Conditioning dictionary with 'cond', 'neg_cond', 'multi_view', and 'contradiction' keys.
+                Single image: cond shape (1, num_patches, hidden_dim), contradiction = 0.0
                 Multi-view: cond is list of shapes [(1, num_patches, hidden_dim), ...]
                     to be cycled through during sampling steps.
+                    contradiction = K measure of multi-view consistency (0.0 = perfect consistency)
         """
         cond = self.encode_image(image)
-        
+
         # Handle single vs multiple images
         if isinstance(image, list) and len(image) > 1:
             # Multi-view: keep as separate conditioning tensors
@@ -218,13 +281,27 @@ class TrellisImageTo3DPipeline(Pipeline):
             # Split into list of individual image conditionings
             cond_list = [cond[i:i+1] for i in range(cond.shape[0])]
             neg_cond_list = [torch.zeros_like(c) for c in cond_list]
-            return {'cond': cond_list, 'neg_cond': neg_cond_list, 'multi_view': True}
+
+            # Compute contradiction measure for multi-view consistency assessment
+            contradiction = _compute_contradiction_measure(cond_list)
+
+            return {
+                'cond': cond_list,
+                'neg_cond': neg_cond_list,
+                'multi_view': True,
+                'contradiction': contradiction
+            }
         else:
             # Single image
             if cond.ndim == 2:
                 cond = cond.unsqueeze(0)
             neg_cond = torch.zeros_like(cond)
-            return {'cond': cond, 'neg_cond': neg_cond, 'multi_view': False}
+            return {
+                'cond': cond,
+                'neg_cond': neg_cond,
+                'multi_view': False,
+                'contradiction': 0.0
+            }
 
     def sample_sparse_structure(
         self,
