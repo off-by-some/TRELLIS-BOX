@@ -36,8 +36,8 @@ services:
       - ${HOST_CACHE_DIR:-~/.cache/trellis}:${CACHE_DIR:-/home/appuser/.cache}
       # Persist Hugging Face cache
       - ${HOST_HF_CACHE_DIR:-~/.cache/huggingface}:${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
-      # Persist rembg model cache
-      - ${HOST_REMBG_CACHE_DIR:-~/.cache/rembg}:${REMBG_CACHE_DIR:-/home/appuser/.u2net}
+      # Persist rembg model cache (use named volume to avoid permission issues)
+      - rembg-cache:${REMBG_CACHE_DIR:-/home/appuser/.u2net}
       # Persist generated outputs (bind mount to local directory)
       - ${OUTPUTS_HOST_DIR:-./outputs}:${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
     environment:
