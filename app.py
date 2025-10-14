@@ -4,6 +4,7 @@ import streamlit.components.v1 as components
 import os
 from loading_screen import show_loading_screen, finalize_loading
 from initialize_pipeline import load_pipeline, reduce_memory_usage
+from ui_components import show_image_preview, show_video_preview, show_3d_model_viewer
 import base64
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads - conservative but effective settings
@@ -535,17 +536,24 @@ def main():
 
             if st.button("Generate 3D Model", type="primary", key="generate_single"):
                 if uploaded_file is not None:
-                    with st.spinner("Generating 3D model..."):
-                        # Process the uploaded image
-                        image = Image.open(uploaded_file)
+                    # Process the uploaded image
+                    image = Image.open(uploaded_file)
+                    
+                    # Show original image preview
+                    show_image_preview(image, "📷 Original Image", expanded=True)
 
+                    with st.spinner("Generating 3D model..."):
                         # Apply refinement if requested
                         if use_refinement_single:
                             st.info("Applying image refinement...")
                             image = apply_image_refinement(image)
+                            show_image_preview(image, "✨ Refined Image", expanded=True)
 
                         # Preprocess image
                         trial_id, processed_image = preprocess_image(image, use_refinement_single)
+                        
+                        # Show preprocessed image
+                        show_image_preview(processed_image, "🎨 Preprocessed (Background Removed)", expanded=False)
 
                         # Generate 3D model
                         state, video_path = image_to_3d(
@@ -560,6 +568,7 @@ def main():
 
                         st.session_state.generated_video = video_path
                         st.session_state.generated_state = state
+                        st.session_state.processed_image = processed_image
 
                         st.success("3D model generated successfully!")
 
@@ -577,34 +586,27 @@ def main():
         with col2:
             st.subheader("Output")
 
+            # Show processed image
+            if st.session_state.get('processed_image'):
+                show_image_preview(st.session_state.processed_image, "🎨 Processed Input", expanded=False)
+
             if st.session_state.generated_video:
-                st.video(st.session_state.generated_video)
+                show_video_preview(st.session_state.generated_video)
 
             if st.session_state.generated_glb:
-                st.success("GLB file generated successfully!")
-
-                # Display 3D model using HTML embed
-                try:
-                    # Create a simple HTML viewer for GLB files
-                    glb_html = f"""
-                    <div style="width: 100%; height: 400px;">
-                        <model-viewer src="data:model/gltf-binary;base64,{base64.b64encode(open(st.session_state.generated_glb, 'rb').read()).decode()}"
-                                     camera-controls auto-rotate style="width: 100%; height: 100%;">
-                        </model-viewer>
-                        <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-                    </div>
-                    """
-                    components.html(glb_html, height=400)
-                except Exception as e:
-                    st.info("3D viewer not available. Download the GLB file to view in external 3D software.")
+                st.success("✅ 3D Model Ready!")
+                
+                # Display 3D model viewer
+                show_3d_model_viewer(st.session_state.generated_glb)
 
                 # Download button
                 with open(st.session_state.generated_glb, "rb") as file:
                     st.download_button(
-                        label="Download GLB",
+                        label="📥 Download GLB",
                         data=file,
                         file_name="generated_model.glb",
-                        mime="model/gltf-binary"
+                        mime="model/gltf-binary",
+                        type="primary"
                     )
 
         # Examples
@@ -723,33 +725,22 @@ def main():
             st.subheader("Output")
 
             if st.session_state.generated_video:
-                st.video(st.session_state.generated_video)
+                show_video_preview(st.session_state.generated_video)
 
             if st.session_state.generated_glb:
-                st.success("GLB file generated successfully!")
-
-                # Display 3D model using HTML embed
-                try:
-                    # Create a simple HTML viewer for GLB files
-                    glb_html = f"""
-                    <div style="width: 100%; height: 400px;">
-                        <model-viewer src="data:model/gltf-binary;base64,{base64.b64encode(open(st.session_state.generated_glb, 'rb').read()).decode()}"
-                                     camera-controls auto-rotate style="width: 100%; height: 100%;">
-                        </model-viewer>
-                        <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-                    </div>
-                    """
-                    components.html(glb_html, height=400)
-                except Exception as e:
-                    st.info("3D viewer not available. Download the GLB file to view in external 3D software.")
+                st.success("✅ Multi-View 3D Model Ready!")
+                
+                # Display 3D model viewer
+                show_3d_model_viewer(st.session_state.generated_glb)
 
                 # Download button
                 with open(st.session_state.generated_glb, "rb") as file:
                     st.download_button(
-                        label="Download GLB",
+                        label="📥 Download GLB",
                         data=file,
                         file_name="multi_view_model.glb",
                         mime="model/gltf-binary",
+                        type="primary",
                         key="download_multi"
                     )
 

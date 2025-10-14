@@ -206,7 +206,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY trellis/ ./trellis/
 COPY extensions/ ./extensions/
 COPY assets/ ./assets/
-COPY app.py loading_screen.py initialize_pipeline.py ./
+COPY app.py loading_screen.py initialize_pipeline.py ui_components.py ./
 
 # Create diagnostic script
 RUN <<EOF
@@ -285,6 +285,7 @@ set -e
 useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER}
 chown -R ${APP_USER}:${APP_USER} /app
 mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chmod -R 777 ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
 chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
 EOF
 
