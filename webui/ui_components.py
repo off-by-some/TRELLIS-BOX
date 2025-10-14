@@ -106,13 +106,12 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        # Use st.empty() to create unique rendering contexts for each video
-        # This prevents duplicate element IDs when the same video is shown in multiple tabs
-        video_container = st.empty()
-        with video_container:
-            # Add a unique HTML comment to differentiate the videos
-            st.markdown(f"<!-- video-{clear_key} -->", unsafe_allow_html=True)
-            st.video(video_path, loop=True, autoplay=True)
+        # Workaround for Streamlit duplicate video IDs: use different start_time for each tab
+        # This makes Streamlit treat them as different elements
+        # Single video gets start_time=0, multi video gets start_time=1 (imperceptible difference)
+        start_time = 0 if clear_key == "single_video" else 1
+        
+        st.video(video_path, loop=True, autoplay=True, start_time=start_time)
         
         with st.expander("ℹ️ Video Info", expanded=False):
             st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
