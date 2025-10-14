@@ -1034,16 +1034,17 @@ class SingleImageUI:
                         
                         # Generate 3D model
                         state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
-                        
-                        # Clear any existing GLB before setting new video
-                        StateManager.set_generated_glb(None)
-                        StateManager.set_generated_video(video_path)
-                        StateManager.set_generated_state(state)
-                        st.session_state.processed_image = processed_image
-                        
-                        # Reset generating flag before rerun
-                        StateManager.set_generating(False)
-                        st.rerun()
+                    
+                    # Exit spinner context before setting state and rerunning
+                    # Clear any existing GLB before setting new video
+                    StateManager.set_generated_glb(None)
+                    StateManager.set_generated_video(video_path)
+                    StateManager.set_generated_state(state)
+                    st.session_state.processed_image = processed_image
+                    
+                    # Reset generating flag before rerun
+                    StateManager.set_generating(False)
+                    st.rerun()
                 except Exception as e:
                     StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
@@ -1222,15 +1223,16 @@ class MultiImageUI:
                             batch_size_multi,
                             params
                         )
-                        
-                        # Clear any existing GLB before setting new video
-                        StateManager.set_generated_glb(None)
-                        StateManager.set_generated_video(video_path)
-                        StateManager.set_generated_state(state)
-                        
-                        # Reset generating flag before rerun
-                        StateManager.set_generating(False)
-                        st.rerun()
+                    
+                    # Exit spinner context before setting state and rerunning
+                    # Clear any existing GLB before setting new video
+                    StateManager.set_generated_glb(None)
+                    StateManager.set_generated_video(video_path)
+                    StateManager.set_generated_state(state)
+                    
+                    # Reset generating flag before rerun
+                    StateManager.set_generating(False)
+                    st.rerun()
                 except Exception as e:
                     StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
