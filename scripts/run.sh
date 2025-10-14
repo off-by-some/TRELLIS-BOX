@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e  # Exit on any error
+export DOCKER_BUILDKIT=1
 
 # Colors for output
 RED='\033[0;31m'

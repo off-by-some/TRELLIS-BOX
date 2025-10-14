@@ -1,1 +1,1 @@
-sudo docker build -t trellis-box .
+DOCKER_BUILDKIT=1 sudo docker build -t trellis-box .
