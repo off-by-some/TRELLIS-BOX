@@ -973,6 +973,10 @@ class SingleImageUI:
                 try:
                     StateManager.set_generating(True)
                     
+                    # Clear processed preview on regeneration to respect current refinement setting
+                    if has_generated and not is_multi_image:
+                        st.session_state.processed_preview = None
+                    
                     if is_multi_image:
                         # Multi-image generation
                         with st.spinner("Processing multiple images..."):
