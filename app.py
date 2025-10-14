@@ -819,7 +819,7 @@ def main():
                 if clear_video == "clear":
                     st.session_state.generated_video = None
                     st.rerun()
-.
+
             # 3D model viewer with clear button
             if st.session_state.generated_glb:
                 st.success("✅ Multi-View 3D Model Ready!")
