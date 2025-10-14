@@ -23,13 +23,13 @@ $ ./trellis.sh run
 
 Or if you prefer, pull and run the pre-built Docker image:
 ```bash
-$ docker run --gpus all -it -p 7860:7860 \
+$ docker run --gpus all -it -p 8501:8501 \
               -v ~/.cache/trellis-box:/root/.cache \ 
               -v ~/.cache/rembg:/root/.u2net \
               -v $(pwd)/outputs:/tmp/Trellis-demo \
             cassidybridges/trellis-box:latest
 ```
-Then simply open http://localhost:7860 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations. 
+Then simply open http://localhost:8501 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations. 
 
 ## Use Cases
 
@@ -127,7 +127,7 @@ The script will prompt for your Docker Hub username and handle login if needed.
 ### Testing Changes
 - Modify `app.py` or other source files
 - Restart the container: `./trellis.sh restart`
-- Test the web interface at http://localhost:7860
+- Test the web interface at http://localhost:8501
 - Check Docker logs: `docker logs trellis-box`
 
 ### Pull Request Process

@@ -536,15 +536,8 @@ nvidia-smi
 docker run --rm --gpus all ubuntu nvidia-smi
 ```
 
-**Solution 3**: For remote GPU machines (like via SSH)
 
-If running on a remote machine (like 10.0.0.217), ensure:
-
-1. SSH into the GPU machine: `ssh user@10.0.0.217`
-2. Run the Docker commands on the GPU machine directly
-3. Or set up Docker context for remote machine
-
-**Solution 4**: Environment-specific GPU access
+**Solution 3**: Environment-specific GPU access
 
 ```bash
 # Force specific GPU
