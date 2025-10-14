@@ -22,14 +22,14 @@ APP_USER=${APP_USER:-appuser}
 APP_UID=${APP_UID:-1000}
 CACHE_DIR=${CACHE_DIR:-/home/appuser/.cache}
 HF_CACHE_DIR=${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
-REMBG_CACHE_DIR=${REMBG_CACHE_DIR:-/home/appuser/.u2net}
-TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
+REMBG_CACHE_DIR=${REMBG_CACHE_DIR:-/app/rembg_cache}
+TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR:-/app/outputs}
 OUTPUTS_HOST_DIR=${OUTPUTS_HOST_DIR:-./outputs}
 
 # Use bind mounts instead of named volumes for better compatibility
 HOST_CACHE_DIR=${HOST_CACHE_DIR:-$HOME/.cache/trellis}
 HOST_HF_CACHE_DIR=${HOST_HF_CACHE_DIR:-$HOME/.cache/huggingface}
-HOST_REMBG_CACHE_DIR=${HOST_REMBG_CACHE_DIR:-$HOME/.cache/rembg}
+HOST_REMBG_CACHE_DIR=${HOST_REMBG_CACHE_DIR:-./rembg_cache}
 
 # Streamlit configuration
 STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
@@ -246,6 +246,13 @@ start_container() {
     ENV_VARS="-e STREAMLIT_SERVER_PORT=${APP_PORT}"
     ENV_VARS="$ENV_VARS -e STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS}"
     ENV_VARS="$ENV_VARS -e STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS}"
+    # Cache directories - ensure models persist across container restarts
+    ENV_VARS="$ENV_VARS -e CACHE_DIR=${CACHE_DIR}"
+    ENV_VARS="$ENV_VARS -e HF_HOME=${HF_CACHE_DIR}"
+    ENV_VARS="$ENV_VARS -e HUGGINGFACE_HUB_CACHE=${HF_CACHE_DIR}"
+    ENV_VARS="$ENV_VARS -e TRANSFORMERS_CACHE=${HF_CACHE_DIR}"
+    ENV_VARS="$ENV_VARS -e U2NET_HOME=${REMBG_CACHE_DIR}"
+    ENV_VARS="$ENV_VARS -e TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR}"
 
     # Only set CUDA_VISIBLE_DEVICES if explicitly set and not using --gpus all
     if [ -n "${CUDA_VISIBLE_DEVICES}" ] && [ "$GPU_FLAG" != "--gpus all" ]; then

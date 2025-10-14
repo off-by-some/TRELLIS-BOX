@@ -540,10 +540,6 @@ def main():
                 label_visibility="visible"
             )
             
-            # Handle uploaded image
-            if uploaded_file is not None:
-                st.session_state.uploaded_image = Image.open(uploaded_file)
-            
             # Show original image with clear button
             clear_action = show_image_preview(
                 st.session_state.uploaded_image, 
@@ -551,10 +547,19 @@ def main():
                 show_clear=True,
                 clear_key="single_original"
             )
+            
+            # Handle clear action first before updating from uploader
             if clear_action == "clear":
                 st.session_state.uploaded_image = None
                 st.session_state.processed_preview = None
+                st.session_state.generated_video = None
+                st.session_state.generated_glb = None
+                st.session_state.generated_state = None
                 st.rerun()
+            
+            # Handle uploaded image (only update if not clearing)
+            if uploaded_file is not None and st.session_state.uploaded_image is None:
+                st.session_state.uploaded_image = Image.open(uploaded_file)
 
             # Auto-remove background and show processed preview
             if st.session_state.uploaded_image is not None:
