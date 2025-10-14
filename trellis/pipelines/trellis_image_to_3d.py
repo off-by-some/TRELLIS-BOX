@@ -105,12 +105,25 @@ class TrellisImageTo3DPipeline(Pipeline):
                 os.makedirs(cache_dir, exist_ok=True)
                 os.chmod(cache_dir, 0o755)
                 self.rembg_session = rembg.new_session('u2net', cache_dir=cache_dir)
-            output = rembg.remove(input, session=self.rembg_session)
+            
+            # Remove background - rembg will create proper alpha channel
+            # where foreground = opaque (255) and background = transparent (0)
+            # This preserves all colors in the foreground, including dark ones
+            output = rembg.remove(
+                input, 
+                session=self.rembg_session,
+                alpha_matting=True,
+                alpha_matting_foreground_threshold=240,  # Pixels definitely in foreground
+                alpha_matting_background_threshold=10,   # Pixels definitely in background
+                alpha_matting_erode_size=5               # Small erosion to clean edges
+            )
         
         # Find object bounding box from alpha channel
+        # Only exclude truly transparent pixels (background)
         output_np = np.array(output)
         alpha = output_np[:, :, 3]
-        bbox_coords = np.argwhere(alpha > 0.8 * 255)
+        # Use threshold of 10 to include all foreground pixels, even if partially transparent
+        bbox_coords = np.argwhere(alpha > 10)
         
         # Calculate centered crop with 20% padding
         x_min, y_min = np.min(bbox_coords[:, 1]), np.min(bbox_coords[:, 0])

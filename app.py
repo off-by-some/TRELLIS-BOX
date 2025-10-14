@@ -879,11 +879,17 @@ if __name__ == "__main__":
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
-        # Show loading screen
-        progress_bar, status_text, start_time = show_loading_screen()
+        # Show loading screen with console output
+        from webui.loading_screen import capture_output
+        progress_bar, status_text, console_output, start_time = show_loading_screen()
 
-        # Load the pipeline
-        pipeline = load_pipeline()
+        # Load the pipeline with captured output
+        status_text.text("Loading TRELLIS pipeline...")
+        progress_bar.progress(10)
+        
+        with capture_output(console_output):
+            pipeline = load_pipeline()
+        
         st.session_state.pipeline = pipeline
 
         # Complete loading UI
