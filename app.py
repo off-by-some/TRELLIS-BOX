@@ -955,16 +955,92 @@ def load_pipeline():
 
 # Launch the Streamlit app
 if __name__ == "__main__":
-    # Load the pipeline and store in session state
-    if 'pipeline' not in st.session_state:
-        st.session_state.pipeline = load_pipeline()
+    import time
 
-    # Set global pipeline variable for compatibility with existing functions
-    global pipeline
-    pipeline = st.session_state.pipeline
+    # Configure the page
+    st.set_page_config(
+        page_title="TRELLIS 3D Generator",
+        page_icon="🎨",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
-    # Load refiner if needed
-    if 'refiner' not in st.session_state:
-        st.session_state.refiner = None
+    # Check if pipeline is already loaded
+    if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
+        # Show loading screen with spinner
+        st.title("🚀 TRELLIS 3D Generator")
+        st.markdown("## Initializing Application...")
 
-    main()
+        # Create a nice loading interface
+        col1, col2, col3 = st.columns([1, 2, 1])
+
+        with col2:
+            st.markdown("""
+            <div style="
+                text-align: center;
+                padding: 2rem;
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                border-radius: 15px;
+                color: white;
+                margin: 2rem 0;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            ">
+                <h2 style="margin-bottom: 1rem;">🎨 Loading AI Models</h2>
+                <p style="margin-bottom: 1rem; opacity: 0.9;">
+                    This is a one-time setup that may take 2-5 minutes.<br>
+                    The application is downloading and initializing AI models.
+                </p>
+                <div style="font-size: 3rem;">⏳</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Progress indicators
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Show initialization steps
+            steps = [
+                "🔧 Setting up PyTorch and CUDA...",
+                "📦 Downloading TRELLIS model weights...",
+                "🎨 Initializing image processing pipeline...",
+                "🧠 Configuring memory optimizations...",
+                "🎯 Loading Stable Diffusion components...",
+                "🏗️ Preparing 3D reconstruction pipeline..."
+            ]
+
+            # Use a spinner for the actual loading
+            with st.spinner("Loading AI models... This may take several minutes."):
+                start_time = time.time()
+
+                # Update progress for each step
+                for i, step in enumerate(steps):
+                    status_text.text(step)
+                    progress_bar.progress(int((i + 1) / len(steps) * 80))  # Leave room for final step
+                    time.sleep(0.5)
+
+                # Actually load the pipeline (this is the heavy operation)
+                try:
+                    st.session_state.pipeline = load_pipeline()
+                    global pipeline
+                    pipeline = st.session_state.pipeline
+                except Exception as e:
+                    st.error(f"Failed to load pipeline: {str(e)}")
+                    st.stop()
+
+                # Mark as loaded
+                progress_bar.progress(100)
+                status_text.text("✅ Application ready!")
+
+                # Show success message
+                st.success("🎉 TRELLIS 3D Generator is ready!")
+                st.balloons()
+
+                # Brief pause to show success
+                time.sleep(2)
+
+                # Trigger page refresh to show main app
+                st.rerun()
+
+    else:
+        # Pipeline is loaded, show main interface
+        main()

@@ -103,6 +103,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         --find-links ${KAOLIN_INDEX_URL} \
         kaolin==${KAOLIN_VERSION}
 
+# Install flash-attention (try wheel first, fallback to source build)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir flash-attn || \
+    (echo "Flash attention wheel not available, attempting source build..." && \
+     pip install --no-cache-dir flash-attention)
+
 # Install custom wheels (diff_gaussian_rasterization, etc.)
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir wheels/*.whl
