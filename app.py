@@ -510,10 +510,21 @@ def main():
             st.subheader("Input")
             uploaded_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"], key="single_image")
 
-            # Show preview of uploaded image
+            # Show preview of uploaded image and auto-remove background
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
-                show_image_preview(image, "📷 Uploaded Image", expanded=True)
+                show_image_preview(image, "📷 Original Image", expanded=False)
+
+                # Auto-remove background and show processed preview
+                if 'pipeline' in st.session_state and st.session_state.pipeline is not None:
+                    pipeline = st.session_state.pipeline
+                    with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                        processed_image = pipeline.preprocess_image(image)
+                    show_image_preview(processed_image, "🎨 Background Removed (Auto)", expanded=True)
+                    st.session_state.processed_preview = processed_image
+                else:
+                    st.info("Background removal preview will be shown after pipeline loads")
+                    st.session_state.processed_preview = None
 
             with st.expander("Generation Settings", expanded=False):
                 seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
@@ -541,24 +552,22 @@ def main():
 
             if st.button("Generate 3D Model", type="primary", key="generate_single"):
                 if uploaded_file is not None:
-                    # Process the uploaded image
-                    image = Image.open(uploaded_file)
-                    
-                    # Show original image preview
-                    show_image_preview(image, "📷 Original Image", expanded=True)
-
                     with st.spinner("Generating 3D model..."):
-                        # Apply refinement if requested
-                        if use_refinement_single:
-                            st.info("Applying image refinement...")
-                            image = apply_image_refinement(image)
-                            show_image_preview(image, "✨ Refined Image", expanded=True)
-
-                        # Preprocess image
-                        trial_id, processed_image = preprocess_image(image, use_refinement_single)
-                        
-                        # Show preprocessed image
-                        show_image_preview(processed_image, "🎨 Preprocessed (Background Removed)", expanded=False)
+                        # Use the auto-processed image from preview, or process it if preview failed
+                        if st.session_state.get('processed_preview') is not None:
+                            processed_image = st.session_state.processed_preview
+                            trial_id = str(uuid.uuid4())
+                            # Save the processed image
+                            processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
+                        else:
+                            # Fallback: process the image normally
+                            image = Image.open(uploaded_file)
+                            # Apply refinement if requested
+                            if use_refinement_single:
+                                st.info("Applying image refinement...")
+                                image = apply_image_refinement(image)
+                            # Preprocess image
+                            trial_id, processed_image = preprocess_image(image, use_refinement_single)
 
                         # Generate 3D model
                         state, video_path = image_to_3d(
@@ -591,9 +600,7 @@ def main():
         with col2:
             st.subheader("Output")
 
-            # Show processed image
-            if st.session_state.get('processed_image'):
-                show_image_preview(st.session_state.processed_image, "🎨 Processed Input", expanded=False)
+            # Processed image is already shown in input section
 
             if st.session_state.generated_video:
                 show_video_preview(st.session_state.generated_video)
