@@ -347,8 +347,9 @@ class TrellisImageTo3DPipeline(Pipeline):
             }
         else:
             # Single view: standard dict of tensors
-            cond_typed = {k: v.to(dtype=flow_model.dtype) for k, v in cond.items() if k != 'multi_view'}
-        
+            cond_typed = {k: v.to(dtype=flow_model.dtype) if hasattr(v, 'to') else v
+                         for k, v in cond.items()}
+
         params = {**self.sparse_structure_sampler_params, **sampler_params}
         
         # Sample sparse structure latent
@@ -490,8 +491,9 @@ class TrellisImageTo3DPipeline(Pipeline):
             }
         else:
             # Single view: standard dict of tensors
-            cond_typed = {k: v.to(dtype=flow_model.dtype) for k, v in cond.items() if k != 'multi_view'}
-        
+            cond_typed = {k: v.to(dtype=flow_model.dtype) if hasattr(v, 'to') else v
+                         for k, v in cond.items()}
+
         params = {**self.slat_sampler_params, **sampler_params}
         
         # Sample latent features
