@@ -43,26 +43,39 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         padding: 1rem !important;
     }
     
-    /* Terminal area grows to fill space */
-    .terminal-container {
+    /* Terminal area wrapper - grows to fill space */
+    .terminal-wrapper {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        margin-bottom: 1rem;
+    }
+    
+    /* Make streamlit elements inside terminal wrapper fill space */
+    .terminal-wrapper > div {
         flex-grow: 1;
         overflow-y: auto;
-        margin-bottom: 1rem;
-        background: #1a1a1a;
-        border-radius: 8px;
-        padding: 1rem;
-        font-family: 'Courier New', monospace;
-        font-size: 0.85rem;
-        color: #00ff00;
     }
     
     /* Progress area stays at bottom */
-    .progress-container {
+    .progress-wrapper {
         flex-shrink: 0;
         padding: 1rem;
         background: rgba(255, 255, 255, 0.05);
         border-radius: 8px;
         border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Style code blocks to look like terminal */
+    .terminal-wrapper pre {
+        background: #1a1a1a !important;
+        color: #00ff00 !important;
+        border: 1px solid #333 !important;
+        border-radius: 8px !important;
+        max-height: none !important;
+        height: 100% !important;
+        overflow-y: auto !important;
     }
     </style>
     """, unsafe_allow_html=True)
