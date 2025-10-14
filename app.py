@@ -716,8 +716,8 @@ def main():
             example_img = Image.open(selected_example)
             
             # Resize large images to prevent OOM errors
-            # TRELLIS works best with images around 512-768px
-            max_size = 768
+            # TRELLIS works best with images around 512px for memory efficiency
+            max_size = 512
             if max(example_img.size) > max_size:
                 # Calculate new size maintaining aspect ratio
                 ratio = max_size / max(example_img.size)
@@ -943,6 +943,11 @@ if __name__ == "__main__":
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
+        # Clean CUDA memory before loading to ensure maximum available memory
+        if torch.cuda.is_available():
+            print("Clearing CUDA memory before pipeline initialization...")
+            reduce_memory_usage()
+        
         # Show loading screen with console output and GPU info
         from webui.loading_screen import capture_output
         progress_bar, status_text, console_output, start_time = show_loading_screen(gpu_info)
