@@ -2,6 +2,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import os
+from loading_screen import show_loading_screen, finalize_loading
+from initialize_pipeline import load_pipeline, reduce_memory_usage
 import base64
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads - conservative but effective settings
@@ -30,42 +32,6 @@ os.makedirs(TMP_DIR, exist_ok=True)
 
 # Global refiner instance (loaded lazily)
 refiner = None
-
-
-def defragment_memory():
-    """
-    Aggressive memory defragmentation for PyTorch CUDA allocator.
-    Attempts to force consolidation of fragmented memory blocks.
-    """
-    if not torch.cuda.is_available():
-        return
-
-    # Multiple rounds of cache clearing and memory consolidation
-    for _ in range(3):
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        if hasattr(torch.cuda, 'consolidate_memory'):
-            torch.cuda.consolidate_memory()
-
-    # Defragment by allocating temporary tensors in increasing sizes
-    total_memory = torch.cuda.get_device_properties(0).total_memory
-    allocated_memory = torch.cuda.memory_allocated()
-    free_memory_mb = (total_memory - allocated_memory) // (1024 * 1024)
-    
-    for i in range(10):
-        size_mb = 50 * (i + 1)
-        if size_mb > min(500, free_memory_mb):
-            break
-        
-        temp = torch.zeros(
-            size_mb * 1024 * 1024 // 4,
-            dtype=torch.float32,
-            device='cuda'
-        )
-        del temp
-        torch.cuda.empty_cache()
-    
-    torch.cuda.synchronize()
 
 
 def create_video_streaming(color_frames, normal_frames, output_path, fps=15, quality=8):
@@ -98,87 +64,6 @@ def create_video_streaming(color_frames, normal_frames, output_path, fps=15, qua
     
     imageio.mimsave(output_path, combined_frames, fps=fps, quality=quality)
     del combined_frames
-
-
-def cleanup_temp_files(max_age_hours=1):
-    """
-    Aggressive cleanup of temporary files to free disk space.
-    Memory optimization: Remove old temporary files that are no longer needed.
-
-    Args:
-        max_age_hours: Maximum age of files to keep (in hours)
-    """
-    import time
-    import os
-    import glob
-
-    try:
-        current_time = time.time()
-        max_age_seconds = max_age_hours * 3600
-
-        # Clean up image files
-        for pattern in [f"{TMP_DIR}/*.png", f"{TMP_DIR}/*.mp4", f"{TMP_DIR}/*.glb"]:
-            for filepath in glob.glob(pattern):
-                try:
-                    if os.path.exists(filepath):
-                        file_age = current_time - os.path.getmtime(filepath)
-                        if file_age > max_age_seconds:
-                            os.remove(filepath)
-                except (OSError, FileNotFoundError):
-                    pass  # File already deleted or inaccessible
-    except Exception as e:
-        # Don't let cleanup errors affect the main flow
-        pass
-
-
-def reduce_memory_usage():
-    """
-    Critical memory management for Trellis workloads: Clears cache, forces GC, and optimizes memory layout.
-    Includes advanced PyTorch memory management and fragmentation prevention.
-    """
-    if torch.cuda.is_available():
-        # Critical: Empty cache and synchronize multiple times
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-        # Advanced memory optimization - consolidate memory pools to reduce fragmentation
-        if hasattr(torch.cuda, 'consolidate_memory'):
-            torch.cuda.consolidate_memory()
-
-        # Force multiple cache clears to ensure fragmentation is reduced
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-        # Reset allocator statistics for better future allocations
-        torch.cuda.reset_peak_memory_stats()
-
-        # Force cleanup of any cached computations
-        if hasattr(torch.cuda, 'reset_max_memory_allocated'):
-            torch.cuda.reset_max_memory_allocated()
-        if hasattr(torch.cuda, 'reset_max_memory_cached'):
-            torch.cuda.reset_max_memory_cached()
-
-        # Additional memory defragmentation attempt
-        # Allocate a small tensor and immediately free it to trigger cleanup
-        temp = torch.zeros(1, device='cuda')
-        del temp
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-
-    # Optimize Python garbage collection with maximum aggression
-    gc.collect(generation=2)  # Collect all generations
-    gc.collect(generation=1)  # Collect generation 1
-    gc.collect(generation=0)  # Collect generation 0
-    gc.collect()  # Additional collection pass
-
-    # Tune GC thresholds for maximum memory efficiency with large objects
-    gc.set_threshold(300, 5, 5)  # Maximum aggression
-
-    # Aggressive temporary file cleanup
-    cleanup_temp_files(max_age_hours=1)
-
-    # Final defragmentation attempt
-    defragment_memory()
 
 
 def apply_image_refinement(image: Image.Image) -> Image.Image:
@@ -240,6 +125,7 @@ def preprocess_image(image: Image.Image, use_refinement: bool = False) -> Tuple[
         torch.cuda.empty_cache()
 
     # Memory-efficient preprocessing with no gradients
+    pipeline = st.session_state.pipeline
     with torch.no_grad():
         # Use autocast for mixed precision preprocessing if beneficial
         with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
@@ -267,6 +153,7 @@ def preprocess_images(images: List[Image.Image], use_refinement: bool = False) -
     processed_images = []
 
     # Process images one by one to minimize memory usage
+    pipeline = st.session_state.pipeline
     for i, img in enumerate(images):
         # Apply refinement if requested
         if use_refinement:
@@ -367,6 +254,7 @@ def image_to_3d(trial_id: str, seed: int, randomize_seed: bool, ss_guidance_stre
         # Memory optimization: Ensure clean state before inference
         reduce_memory_usage()
 
+        pipeline = st.session_state.pipeline
         with torch.inference_mode():
             # Critical memory optimization before heavy computation
             reduce_memory_usage()
@@ -480,6 +368,7 @@ def images_to_3d(trial_id: str, num_images: int, batch_size: int, seed: int, ran
     
     # Get multi-view conditioning by passing all images at once
     # This preserves spatial relationships between different viewpoints
+    pipeline = st.session_state.pipeline
     with torch.inference_mode():
         cond = pipeline.get_cond(images)
     
@@ -866,93 +755,6 @@ def main():
 
     
 
-# Launch the Gradio app
-# Initialize and cache the pipeline
-@st.cache_resource
-def load_pipeline():
-    """Load and configure the TRELLIS pipeline with memory optimizations."""
-    print("Loading TRELLIS pipeline...")
-
-    # Pre-optimize memory before loading large model
-    reduce_memory_usage()
-
-    # Load pipeline with memory optimizations
-    pipeline = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
-
-    # Move to GPU with memory optimization
-    pipeline.cuda()
-    reduce_memory_usage()  # Clean up any loading artifacts
-
-    # Set models to evaluation mode and convert transformer models to half precision for memory efficiency
-    for model_name, model in pipeline.models.items():
-        if hasattr(model, 'eval'):
-            model.eval()
-
-        # Convert all transformer models to fp16 for maximum VRAM savings
-        if 'flow' in model_name or 'decoder' in model_name:
-            # Convert flow models and decoders to half precision for significant memory savings
-            # But keep norm layers in fp32 for numerical stability
-            model.half()
-
-            # Ensure norm layers stay in fp32 for numerical stability
-            from trellis.modules.norm import LayerNorm32, GroupNorm32, ChannelLayerNorm32
-            from trellis.modules.sparse.norm import SparseGroupNorm32, SparseLayerNorm32
-            from trellis.modules.attention.modules import MultiHeadRMSNorm
-            from trellis.modules.sparse.attention.modules import SparseMultiHeadRMSNorm
-            for module in model.modules():
-                if isinstance(module, (LayerNorm32, GroupNorm32, ChannelLayerNorm32,
-                                     SparseGroupNorm32, SparseLayerNorm32,
-                                     MultiHeadRMSNorm, SparseMultiHeadRMSNorm)):
-                    module.float()
-
-        # Keep image_cond_model (DINOv2) and other models in fp32 for compatibility
-
-    # Enable cuDNN optimizations
-    if torch.cuda.is_available():
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.enabled = True
-
-    # Advanced memory and precision optimizations
-    if torch.cuda.is_available():
-        # Enable TF32 for better performance on Ampere+ GPUs
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.allow_tf32 = True
-
-        # Advanced attention and memory optimizations
-        # Enable gradient checkpointing for inference memory efficiency
-        for model in pipeline.models.values():
-            if hasattr(model, 'gradient_checkpointing_enable'):
-                model.gradient_checkpointing_enable()
-
-        # Memory-efficient sparse attention optimizations
-        if hasattr(torch, 'sparse'):
-            # Ensure sparse operations are available for memory efficiency
-            pass  # torch.sparse is available
-
-        # Enable memory-efficient sparse operations
-        os.environ['CUDNN_CONVOLUTION_BWD_FILTER_ALGO'] = '1'  # Use efficient backward algorithms
-
-        # Kernel fusion optimizations
-        if hasattr(torch.jit, 'enable_onednn_fusion'):
-            torch.jit.enable_onednn_fusion(True)
-
-        # Memory optimization for large models on 3080 Ti
-        # Removed memory fraction limit to allow full GPU utilization during mesh decoding
-
-        # Enable memory efficient attention if available
-        if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
-            os.environ['TORCH_USE_CUDA_DSA'] = '1'
-
-    print("TRELLIS pipeline loaded successfully")
-    print(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-    print(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-
-    # Final memory optimization before serving
-    reduce_memory_usage()
-    print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
-
-    return pipeline
-
 # Launch the Streamlit app
 if __name__ == "__main__":
     import time
@@ -981,7 +783,7 @@ if __name__ == "__main__":
     pytorch_cuda_available = torch.cuda.is_available()
 
     # Display diagnostic information
-    with st.expander("GPU Diagnostics", expanded=True):
+    with st.expander("GPU Diagnostics", expanded=False):
         st.write("**System Information:**")
         col1, col2 = st.columns(2)
         with col1:
@@ -1037,79 +839,19 @@ if __name__ == "__main__":
 
     # Check if pipeline is already loaded
     if 'pipeline' not in st.session_state or st.session_state.pipeline is None:
-        # Show loading screen with spinner
-        st.title("🚀 TRELLIS 3D Generator")
-        st.markdown("## Initializing Application...")
+        # Show loading screen
+        progress_bar, status_text, start_time = show_loading_screen()
 
-        # Create a nice loading interface
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # Load the pipeline
+        try:
+            pipeline = load_pipeline()
+            st.session_state.pipeline = pipeline
+        except Exception as e:
+            st.error(f"Pipeline initialization failed: {str(e)}")
+            st.stop()
 
-        with col2:
-            st.markdown("""
-            <div style="
-                text-align: center;
-                padding: 2rem;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 15px;
-                color: white;
-                margin: 2rem 0;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            ">
-                <h2 style="margin-bottom: 1rem;">Initializing TRELLIS</h2>
-                <p style="margin-bottom: 1rem; opacity: 0.9;">
-                    Loading AI models and preparing 3D generation pipeline.<br>
-                    This one-time setup may take 2-5 minutes.
-                </p>
-                <div style="font-size: 3rem;">⏳</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # Progress indicators
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            # Show initialization steps
-            steps = [
-                "Setting up PyTorch and CUDA environment...",
-                "Downloading TRELLIS model weights...",
-                "Initializing image processing pipeline...",
-                "Configuring memory optimizations...",
-                "Loading Stable Diffusion components...",
-                "Preparing 3D reconstruction pipeline..."
-            ]
-
-            # Use a spinner for the actual loading
-            with st.spinner("Loading AI models... This may take several minutes."):
-                start_time = time.time()
-
-                # Update progress for each step
-                for i, step in enumerate(steps):
-                    status_text.text(step)
-                    progress_bar.progress(int((i + 1) / len(steps) * 80))  # Leave room for final step
-                    time.sleep(0.5)
-
-                # Actually load the pipeline (this is the heavy operation)
-                try:
-                    st.session_state.pipeline = load_pipeline()
-                    global pipeline
-                    pipeline = st.session_state.pipeline
-                except Exception as e:
-                    st.error(f"Pipeline initialization failed: {str(e)}")
-                    st.stop()
-
-                # Mark as loaded
-                progress_bar.progress(100)
-                status_text.text("Application ready")
-
-                # Show success message
-                st.success("TRELLIS initialization completed")
-                st.balloons()
-
-                # Brief pause to show success
-                time.sleep(2)
-
-                # Trigger page refresh to show main app
-                st.rerun()
+        # Complete loading UI
+        finalize_loading(progress_bar, status_text, pipeline)
 
     else:
         # Pipeline is loaded, show main interface

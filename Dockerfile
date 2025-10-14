@@ -206,7 +206,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY trellis/ ./trellis/
 COPY extensions/ ./extensions/
 COPY assets/ ./assets/
-COPY app.py ./
+COPY app.py loading_screen.py initialize_pipeline.py ./
 
 # Create diagnostic script
 RUN <<EOF
