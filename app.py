@@ -891,6 +891,181 @@ class SingleImageUI:
                 st.session_state.processed_preview = None
     
     @staticmethod
+    def _render_generation_panel(
+        uploaded_data: Any,
+        is_multi_image: bool,
+        video_key: str,
+        glb_key: str,
+        download_key: str,
+        generate_key: str,
+        seed_key: str,
+        randomize_key: str,
+        refinement_key: str,
+        ss_strength_key: str,
+        ss_steps_key: str,
+        slat_strength_key: str,
+        slat_steps_key: str,
+        simplify_key: str,
+        texture_key: str,
+        batch_size_key: str = None
+    ) -> None:
+        """
+        Render complete generation panel with settings, button, and output preview.
+        This is a fully reusable component for both single and multi-image tabs.
+        
+        Args:
+            uploaded_data: Uploaded image or list of images
+            is_multi_image: True for multi-image, False for single-image
+            video_key: Unique key for video clear button
+            glb_key: Unique key for GLB clear button
+            download_key: Unique key for download button
+            generate_key: Unique key for generate button
+            seed_key: Unique key for seed slider
+            randomize_key: Unique key for randomize checkbox
+            refinement_key: Unique key for refinement checkbox
+            ss_strength_key: Unique key for sparse structure guidance strength
+            ss_steps_key: Unique key for sparse structure sampling steps
+            slat_strength_key: Unique key for slat guidance strength
+            slat_steps_key: Unique key for slat sampling steps
+            simplify_key: Unique key for mesh simplify slider
+            texture_key: Unique key for texture size slider
+            batch_size_key: Unique key for batch size slider (multi-image only)
+        """
+        # Check if we have valid input
+        has_input = False
+        if is_multi_image:
+            has_input = uploaded_data and len(uploaded_data) >= 2
+        else:
+            has_input = uploaded_data is not None
+        
+        # Only show generation settings if we have input
+        if has_input:
+            # Generation Settings
+            with st.expander("Generation Settings", expanded=True):
+                seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
+                randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
+                use_refinement = st.checkbox(
+                    "Image Refinement (SD-XL)",
+                    value=False,
+                    help="Enhance input quality with Stable Diffusion XL (adds ~10s" + (" per image)" if is_multi_image else ", uses extra VRAM)"),
+                    key=refinement_key
+                )
+                
+                # Batch size for multi-image only
+                if is_multi_image and batch_size_key:
+                    batch_size = st.slider(
+                        "Batch Size", 1, 4, 2, 1,
+                        help="Number of images processed at once (lower = less memory)",
+                        key=batch_size_key
+                    )
+                
+                st.markdown("**Stage 1: Sparse Structure Generation**")
+                ss_col1, ss_col2 = st.columns(2)
+                with ss_col1:
+                    ss_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key=ss_strength_key)
+                with ss_col2:
+                    ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
+                
+                st.markdown("**Stage 2: Structured Latent Generation**")
+                slat_col1, slat_col2 = st.columns(2)
+                with slat_col1:
+                    slat_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key=slat_strength_key)
+                with slat_col2:
+                    slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
+            
+            # GLB Export Settings
+            with st.expander("GLB Export Settings", expanded=False):
+                mesh_simplify = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key=simplify_key)
+                texture_size = st.slider("Texture Size", 512, 2048, 1024, 512, key=texture_key)
+            
+            # Generate/Regenerate button
+            is_generating = StateManager.is_generating()
+            has_generated = StateManager.get_generated_video() is not None
+            
+            if is_multi_image:
+                button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model from Multiple Views"
+            else:
+                button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
+            
+            button_disabled = is_generating or (is_multi_image and len(uploaded_data) < 2)
+            
+            if st.button(button_label, type="primary", key=generate_key, use_container_width=True, disabled=button_disabled):
+                try:
+                    StateManager.set_generating(True)
+                    
+                    if is_multi_image:
+                        # Multi-image generation
+                        with st.spinner("Processing multiple images..."):
+                            images = [Image.open(f) for f in uploaded_data]
+                            
+                            if use_refinement:
+                                st.info("Applying image refinement to all images...")
+                                images = [ImageProcessor.apply_refinement(img) for img in images]
+                            
+                            trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
+                                images,
+                                use_refinement
+                            )
+                            
+                            params = GenerationParams(
+                                seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
+                                randomize_seed=randomize_seed,
+                                ss_guidance_strength=ss_guidance_strength,
+                                ss_sampling_steps=ss_sampling_steps,
+                                slat_guidance_strength=slat_guidance_strength,
+                                slat_sampling_steps=slat_sampling_steps
+                            )
+                            
+                            state, video_path = ModelGenerator.generate_from_multiple_images(
+                                trial_id,
+                                len(processed_images),
+                                batch_size,
+                                params
+                            )
+                    else:
+                        # Single-image generation
+                        with st.spinner("Generating 3D model..."):
+                            if st.session_state.get('processed_preview') is not None:
+                                processed_image = st.session_state.processed_preview
+                                trial_id = str(uuid.uuid4())
+                                processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
+                            else:
+                                trial_id, processed_image = ImageProcessor.preprocess_single_image(
+                                    uploaded_data,
+                                    use_refinement
+                                )
+                            
+                            params = GenerationParams(
+                                seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
+                                randomize_seed=randomize_seed,
+                                ss_guidance_strength=ss_guidance_strength,
+                                ss_sampling_steps=ss_sampling_steps,
+                                slat_guidance_strength=slat_guidance_strength,
+                                slat_sampling_steps=slat_sampling_steps
+                            )
+                            
+                            state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
+                            st.session_state.processed_image = processed_image
+                    
+                    # Exit spinner context before setting state and rerunning
+                    StateManager.set_generated_glb(None)
+                    StateManager.set_generated_video(video_path)
+                    StateManager.set_generated_state(state)
+                    
+                    StateManager.set_generating(False)
+                    st.rerun()
+                except Exception as e:
+                    StateManager.set_generating(False)
+                    st.error(f"❌ Generation failed: {str(e)}")
+                    st.warning("Try reducing image size or restarting the application if memory errors persist.")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
+        
+        # Output preview (always shown)
+        SingleImageUI._render_output_preview(video_key, glb_key, download_key)
+    
+    @staticmethod
     def _render_output_preview(video_key: str, glb_key: str, download_key: str) -> None:
         """
         Render output preview section (video + GLB viewer).
@@ -981,96 +1156,23 @@ class SingleImageUI:
         
         uploaded_image = StateManager.get_uploaded_image()
         
-        # Only show generation settings if an image is uploaded
-        if uploaded_image is not None:
-            # Generation settings
-            with st.expander("Generation Settings", expanded=True):
-                seed_single = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_single")
-                randomize_seed_single = st.checkbox("Randomize Seed", value=True, key="randomize_single")
-                use_refinement_single = st.checkbox(
-                    "Image Refinement (SD-XL)",
-                    value=False,
-                    help="Enhance input quality with Stable Diffusion XL (adds ~10s, uses extra VRAM)",
-                    key="refinement_single"
-                )
-                
-                st.markdown("**Stage 1: Sparse Structure Generation**")
-                ss_col1, ss_col2 = st.columns(2)
-                with ss_col1:
-                    ss_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_single")
-                with ss_col2:
-                    ss_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_single")
-                
-                st.markdown("**Stage 2: Structured Latent Generation**")
-                slat_col1, slat_col2 = st.columns(2)
-                with slat_col1:
-                    slat_guidance_strength_single = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_single")
-                with slat_col2:
-                    slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
-            
-            # GLB Export Settings
-            with st.expander("GLB Export Settings", expanded=False):
-                mesh_simplify_single = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_single")
-                texture_size_single = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_single")
-            
-            # Generate/Regenerate button
-            is_generating = StateManager.is_generating()
-            has_generated = StateManager.get_generated_video() is not None
-            
-            button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
-            
-            if st.button(button_label, type="primary", key="generate_single", use_container_width=True, disabled=is_generating):
-                try:
-                    StateManager.set_generating(True)
-                    with st.spinner("Generating 3D model..."):
-                        # Use the auto-processed image from preview, or process it if preview failed
-                        if st.session_state.get('processed_preview') is not None:
-                            processed_image = st.session_state.processed_preview
-                            trial_id = str(uuid.uuid4())
-                            processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
-                        else:
-                            # Fallback: process the image normally
-                            trial_id, processed_image = ImageProcessor.preprocess_single_image(
-                                uploaded_image,
-                                use_refinement_single
-                            )
-                        
-                        # Create generation parameters
-                        params = GenerationParams(
-                            seed=seed_single if not randomize_seed_single else np.random.randint(0, MAX_SEED),
-                            randomize_seed=randomize_seed_single,
-                            ss_guidance_strength=ss_guidance_strength_single,
-                            ss_sampling_steps=ss_sampling_steps_single,
-                            slat_guidance_strength=slat_guidance_strength_single,
-                            slat_sampling_steps=slat_sampling_steps_single
-                        )
-                        
-                        # Generate 3D model
-                        state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
-                    
-                    # Exit spinner context before setting state and rerunning
-                    # Clear any existing GLB before setting new video
-                    StateManager.set_generated_glb(None)
-                    StateManager.set_generated_video(video_path)
-                    StateManager.set_generated_state(state)
-                    st.session_state.processed_image = processed_image
-                    
-                    # Reset generating flag before rerun
-                    StateManager.set_generating(False)
-                    st.rerun()
-                except Exception as e:
-                    StateManager.set_generating(False)
-                    st.error(f"❌ Generation failed: {str(e)}")
-                    st.warning("Try reducing image size or restarting the application if memory errors persist.")
-                    import traceback
-                    with st.expander("Error Details"):
-                        st.code(traceback.format_exc())
-        
-        # Use shared output preview component
-        SingleImageUI._render_output_preview(
+        # Use unified generation panel component
+        SingleImageUI._render_generation_panel(
+            uploaded_data=uploaded_image,
+            is_multi_image=False,
             video_key="single_video",
             glb_key="single_glb",
-            download_key="download_single"
+            download_key="download_single",
+            generate_key="generate_single",
+            seed_key="seed_single",
+            randomize_key="randomize_single",
+            refinement_key="refinement_single",
+            ss_strength_key="ss_strength_single",
+            ss_steps_key="ss_steps_single",
+            slat_strength_key="slat_strength_single",
+            slat_steps_key="slat_steps_single",
+            simplify_key="simplify_single",
+            texture_key="texture_single"
         )
     
     @staticmethod
@@ -1163,114 +1265,24 @@ class MultiImageUI:
         # Get uploaded files from the input column
         multi_uploaded_files = st.session_state.get("multi_images")
         
-        # Only show generation settings if images are uploaded
-        if multi_uploaded_files and len(multi_uploaded_files) >= 2:
-            # Generation Settings
-            with st.expander("Generation Settings", expanded=True):
-                seed_multi = st.slider("Seed", 0, MAX_SEED, 0, 1, key="seed_multi")
-                randomize_seed_multi = st.checkbox("Randomize Seed", value=True, key="randomize_multi")
-                use_refinement_multi = st.checkbox(
-                    "Image Refinement (SD-XL)",
-                    value=False,
-                    help="Enhance input quality with Stable Diffusion XL (adds ~10s per image)",
-                    key="refinement_multi"
-                )
-                batch_size_multi = st.slider(
-                    "Batch Size", 1, 4, 2, 1,
-                    help="Number of images processed at once (lower = less memory)",
-                    key="batch_size_multi"
-                )
-                
-                st.markdown("**Stage 1: Sparse Structure Generation**")
-                ss_col1, ss_col2 = st.columns(2)
-                with ss_col1:
-                    ss_guidance_strength_multi = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key="ss_strength_multi")
-                with ss_col2:
-                    ss_sampling_steps_multi = st.slider("Sampling Steps", 1, 50, 12, 1, key="ss_steps_multi")
-                
-                st.markdown("**Stage 2: Structured Latent Generation**")
-                slat_col1, slat_col2 = st.columns(2)
-                with slat_col1:
-                    slat_guidance_strength_multi = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key="slat_strength_multi")
-                with slat_col2:
-                    slat_sampling_steps_multi = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_multi")
-            
-            # GLB export settings
-            with st.expander("GLB Export Settings", expanded=False):
-                mesh_simplify_multi = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key="simplify_multi")
-                texture_size_multi = st.slider("Texture Size", 512, 2048, 1024, 512, key="texture_multi")
-            
-            # Generate/Regenerate button
-            is_generating = StateManager.is_generating()
-            has_generated = StateManager.get_generated_video() is not None
-            multi_disabled = len(multi_uploaded_files or []) < 2 or is_generating
-            
-            button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model from Multiple Views"
-            
-            if st.button(
-                button_label,
-                type="primary",
-                disabled=multi_disabled,
-                key="generate_multi"
-            ):
-                if multi_uploaded_files and len(multi_uploaded_files) >= 2:
-                    try:
-                        StateManager.set_generating(True)
-                        with st.spinner("Processing multiple images..."):
-                            # Process uploaded images
-                            images = [Image.open(f) for f in multi_uploaded_files]
-                            
-                            # Apply refinement if requested
-                            if use_refinement_multi:
-                                st.info("Applying image refinement to all images...")
-                                images = [ImageProcessor.apply_refinement(img) for img in images]
-                            
-                            # Preprocess images
-                            trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
-                                images,
-                                use_refinement_multi
-                            )
-                            
-                            # Create generation parameters
-                            params = GenerationParams(
-                                seed=seed_multi if not randomize_seed_multi else np.random.randint(0, MAX_SEED),
-                                randomize_seed=randomize_seed_multi,
-                                ss_guidance_strength=ss_guidance_strength_multi,
-                                ss_sampling_steps=ss_sampling_steps_multi,
-                                slat_guidance_strength=slat_guidance_strength_multi,
-                                slat_sampling_steps=slat_sampling_steps_multi
-                            )
-                            
-                            # Generate 3D model from multiple images
-                            state, video_path = ModelGenerator.generate_from_multiple_images(
-                                trial_id,
-                                len(processed_images),
-                                batch_size_multi,
-                                params
-                            )
-                        
-                        # Exit spinner context before setting state and rerunning
-                        # Clear any existing GLB before setting new video
-                        StateManager.set_generated_glb(None)
-                        StateManager.set_generated_video(video_path)
-                        StateManager.set_generated_state(state)
-                        
-                        # Reset generating flag before rerun
-                        StateManager.set_generating(False)
-                        st.rerun()
-                    except Exception as e:
-                        StateManager.set_generating(False)
-                        st.error(f"❌ Generation failed: {str(e)}")
-                        st.warning("Try reducing image size or restarting the application if memory errors persist.")
-                        import traceback
-                        with st.expander("Error Details"):
-                            st.code(traceback.format_exc())
-        
-        # Use shared output preview component (same as single image)
-        SingleImageUI._render_output_preview(
+        # Use unified generation panel component
+        SingleImageUI._render_generation_panel(
+            uploaded_data=multi_uploaded_files,
+            is_multi_image=True,
             video_key="multi_video",
             glb_key="multi_glb",
-            download_key="download_multi"
+            download_key="download_multi",
+            generate_key="generate_multi",
+            seed_key="seed_multi",
+            randomize_key="randomize_multi",
+            refinement_key="refinement_multi",
+            ss_strength_key="ss_strength_multi",
+            ss_steps_key="ss_steps_multi",
+            slat_strength_key="slat_strength_multi",
+            slat_steps_key="slat_steps_multi",
+            simplify_key="simplify_multi",
+            texture_key="texture_multi",
+            batch_size_key="batch_size_multi"
         )
 
 
