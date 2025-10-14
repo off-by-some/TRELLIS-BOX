@@ -110,7 +110,6 @@ def show_loading_screen():
                 <strong>First run may take 2-5 minutes</strong>
             </p>
             <div class="loading-icon">⏳</div>
-            <p class="hint-text">💡 Click or hover to see live terminal output</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -130,33 +129,50 @@ def capture_output(console_display):
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     
-    stdout_buffer = StringIO()
-    stderr_buffer = StringIO()
+    # Use lists to accumulate all output
+    output_lines = []
     
     class TeeOutput:
-        def __init__(self, original, buffer, console_display):
+        def __init__(self, original, output_lines, console_display):
             self.original = original
-            self.buffer = buffer
+            self.output_lines = output_lines
             self.console_display = console_display
+            self.current_line = ""
             
         def write(self, text):
             self.original.write(text)
-            self.buffer.write(text)
-            # Update console display with accumulated output
-            if self.console_display and text.strip():
-                full_output = self.buffer.getvalue()
-                # Show last 50 lines
-                lines = full_output.split('\n')
-                display_text = '\n'.join(lines[-50:])
-                self.console_display.code(display_text, language='bash')
+            self.original.flush()
+            
+            # Accumulate text
+            self.current_line += text
+            
+            # If we have newlines, add complete lines to our list
+            if '\n' in self.current_line:
+                lines = self.current_line.split('\n')
+                # Add all complete lines
+                for line in lines[:-1]:
+                    if line.strip():  # Only add non-empty lines
+                        self.output_lines.append(line)
+                # Keep the last incomplete line
+                self.current_line = lines[-1]
+                
+                # Update display with accumulated output
+                if self.console_display and self.output_lines:
+                    # Show last 50 lines
+                    display_text = '\n'.join(self.output_lines[-50:])
+                    if self.current_line:
+                        display_text += '\n' + self.current_line
+                    self.console_display.code(display_text, language='bash')
             
         def flush(self):
             self.original.flush()
     
     try:
-        sys.stdout = TeeOutput(old_stdout, stdout_buffer, console_display)
-        sys.stderr = TeeOutput(old_stderr, stderr_buffer, console_display)
-        yield stdout_buffer, stderr_buffer
+        tee_out = TeeOutput(old_stdout, output_lines, console_display)
+        tee_err = TeeOutput(old_stderr, output_lines, console_display)
+        sys.stdout = tee_out
+        sys.stderr = tee_err
+        yield output_lines
     finally:
         sys.stdout = old_stdout
         sys.stderr = old_stderr
