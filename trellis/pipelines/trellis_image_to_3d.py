@@ -308,10 +308,24 @@ class TrellisImageTo3DPipeline(Pipeline):
         outputs = {}
         
         if 'mesh' in formats:
+            # Aggressive memory cleanup before mesh decoding (most memory-intensive operation)
+            import gc
+            gc.collect()
             torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            
+            # Print memory stats for debugging
+            if torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated() / 1024**3
+                reserved = torch.cuda.memory_reserved() / 1024**3
+                print(f"Before mesh decode - Allocated: {allocated:.2f}GB, Reserved: {reserved:.2f}GB")
+            
             mesh = self.models['slat_decoder_mesh'](slat)
             outputs['mesh'] = self._convert_to_fp32(mesh)
+            
+            # Cleanup after mesh decoding
             torch.cuda.empty_cache()
+            gc.collect()
         
         if 'gaussian' in formats:
             gaussian = self.models['slat_decoder_gs'](slat)
