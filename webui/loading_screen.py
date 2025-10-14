@@ -34,11 +34,38 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* Main container with flexbox layout */
+    .main .block-container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        padding: 1rem !important;
+    }
+    
+    /* Terminal area grows to fill space */
+    .terminal-container {
+        flex-grow: 1;
+        overflow-y: auto;
+        margin-bottom: 1rem;
+        background: #1a1a1a;
+        border-radius: 8px;
+        padding: 1rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: #00ff00;
+    }
+    
+    /* Progress area stays at bottom */
+    .progress-container {
+        flex-shrink: 0;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
     </style>
     """, unsafe_allow_html=True)
-    
-    # Console output container (behind the glass overlay)
-    console_output = st.empty()
     
     # Glassmorphic overlay banner with GPU info
     st.markdown(f"""
@@ -48,19 +75,11 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         50% {{ opacity: 0.8; }}
     }}
     
-    .loading-container {{
-        position: relative;
-        width: 100%;
-        margin: 2rem auto;
-        max-width: 1200px;
-        min-height: 400px;
-    }}
-    
     .glass-overlay {{
         position: fixed;
-        top: 20px;
+        top: 50%;
         left: 50%;
-        transform: translateX(-50%);
+        transform: translate(-50%, -50%);
         width: 90%;
         max-width: 840px;
         padding: 2rem;
@@ -100,12 +119,6 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         margin-bottom: 0.8rem;
     }}
     
-    .loading-icon {{
-        font-size: 3.2rem;
-        animation: pulse 2s ease-in-out infinite;
-        margin: 0.8rem 0;
-    }}
-    
     .gpu-info {{
         font-size: 0.8rem;
         color: #4a5568;
@@ -122,24 +135,28 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     }}
     </style>
     
-    <div class="loading-container">
-        <div class="glass-overlay" onclick="this.style.opacity='0'; this.style.pointerEvents='none';">
-            {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS Banner">' if banner_img else '<h1 style="color: #667eea; font-size: 2.4rem; margin-bottom: 0.8rem;">TRELLIS</h1>'}
-            <p>
-                Initializing AI models and CUDA environment<br>
-                <strong>First run may take 2-5 minutes</strong>
-            </p>
-            <div class="gpu-info">
-                <strong>GPU:</strong> {gpu_info}
-            </div>
+    <div class="glass-overlay" onclick="this.style.opacity='0'; this.style.pointerEvents='none';">
+        {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS Banner">' if banner_img else '<h1 style="color: #667eea; font-size: 2.4rem; margin-bottom: 0.8rem;">TRELLIS</h1>'}
+        <p>
+            Initializing AI models and CUDA environment<br>
+            <strong>First run may take 2-5 minutes</strong>
+        </p>
+        <div class="gpu-info">
+            <strong>GPU:</strong> {gpu_info}
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Progress indicators below the glass overlay
-    st.markdown("---")
+    # Terminal output container (grows to fill space)
+    st.markdown('<div class="terminal-container">', unsafe_allow_html=True)
+    console_output = st.empty()
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Progress indicators at the bottom (fixed position)
+    st.markdown('<div class="progress-container">', unsafe_allow_html=True)
     progress_bar = st.progress(0)
     status_text = st.empty()
+    st.markdown('</div>', unsafe_allow_html=True)
     
     start_time = time.time()
     return progress_bar, status_text, console_output, start_time
@@ -147,7 +164,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
 
 @contextlib.contextmanager
 def capture_output(console_display):
-    """Context manager to capture stdout/stderr and display in Streamlit."""
+    """Context manager to capture stdout/stderr and display in Streamlit like a real terminal."""
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     
@@ -171,20 +188,41 @@ def capture_output(console_display):
             # If we have newlines, add complete lines to our list
             if '\n' in self.current_line:
                 lines = self.current_line.split('\n')
-                # Add all complete lines
+                # Add all complete lines (including empty ones for proper spacing)
                 for line in lines[:-1]:
-                    if line.strip():  # Only add non-empty lines
-                        self.output_lines.append(line)
+                    self.output_lines.append(line)
                 # Keep the last incomplete line
                 self.current_line = lines[-1]
                 
-                # Update display with accumulated output
+                # Update display with accumulated output - like a real terminal
                 if self.console_display and self.output_lines:
-                    # Show last 50 lines
-                    display_text = '\n'.join(self.output_lines[-50:])
-                    if self.current_line:
-                        display_text += '\n' + self.current_line
-                    self.console_display.code(display_text, language='bash')
+                    # Show last 100 lines (more than before for better context)
+                    display_lines = self.output_lines[-100:]
+                    
+                    # Add current incomplete line if exists
+                    if self.current_line.strip():
+                        display_lines.append(self.current_line)
+                    
+                    # Join and display - newest lines are at the bottom
+                    display_text = '\n'.join(display_lines)
+                    
+                    # Display with terminal-like styling
+                    self.console_display.markdown(f"""
+                    <div style="
+                        background: #1a1a1a;
+                        color: #00ff00;
+                        padding: 1rem;
+                        border-radius: 8px;
+                        font-family: 'Courier New', monospace;
+                        font-size: 0.85rem;
+                        overflow-y: auto;
+                        max-height: 60vh;
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
+                    ">
+                    <code>{display_text}</code>
+                    </div>
+                    """, unsafe_allow_html=True)
             
         def flush(self):
             self.original.flush()
