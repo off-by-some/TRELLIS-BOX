@@ -80,26 +80,31 @@ def apply_image_refinement(image: Image.Image) -> Image.Image:
     """
     global refiner
     
-    try:
-        # Load refiner if not already loaded
-        if refiner is None:
+    # Load refiner if not already loaded
+    if refiner is None:
+        try:
             print("Loading Stable Diffusion XL Refiner...")
             refiner = ImageRefiner(device="cuda", use_fp16=True)
-        
-        # Apply refinement
-        refined_image = refiner.refine(
-            image,
-            strength=0.3,  # Subtle refinement to preserve original
-            guidance_scale=7.5,
-            num_inference_steps=20,
-            prompt="high quality, detailed, sharp, clean",
-            negative_prompt="blurry, low quality, distorted, artifacts"
-        )
-        
-        return refined_image
-        
-    except Exception as e:
-        print(f"Refinement failed: {e}, using original image")
+        except Exception as e:
+            print(f"Failed to load refiner: {e}, skipping refinement")
+            return image
+
+    # Apply refinement
+    if refiner is not None:
+        try:
+            refined_image = refiner.refine(
+                image,
+                strength=0.3,  # Subtle refinement to preserve original
+                guidance_scale=7.5,
+                num_inference_steps=20,
+                prompt="high quality, detailed, sharp, clean",
+                negative_prompt="blurry, low quality, distorted, artifacts"
+            )
+            return refined_image
+        except Exception as e:
+            print(f"Refinement failed: {e}, using original image")
+            return image
+    else:
         return image
 
 
