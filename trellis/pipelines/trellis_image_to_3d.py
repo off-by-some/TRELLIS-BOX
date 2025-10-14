@@ -112,10 +112,8 @@ class TrellisImageTo3DPipeline(Pipeline):
             output = rembg.remove(
                 input, 
                 session=self.rembg_session,
-                alpha_matting=True,
-                alpha_matting_foreground_threshold=240,  # Pixels definitely in foreground
-                alpha_matting_background_threshold=10,   # Pixels definitely in background
-                alpha_matting_erode_size=5               # Small erosion to clean edges
+                only_mask=False,
+                post_process_mask=True
             )
         
         # Find object bounding box from alpha channel
