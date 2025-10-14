@@ -549,12 +549,14 @@ def main():
                 show_clear=True,
                 show_info=True
             ):
-                # Clear action triggered
+                # Clear action triggered - clean up CUDA memory
                 st.session_state.uploaded_image = None
                 st.session_state.processed_preview = None
                 st.session_state.generated_video = None
                 st.session_state.generated_glb = None
                 st.session_state.generated_state = None
+                # Force CUDA cleanup
+                reduce_memory_usage()
                 st.rerun()
             
             # Handle uploaded image
@@ -568,6 +570,8 @@ def main():
                     st.session_state.generated_video = None
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
+                    # Force CUDA cleanup when switching images
+                    reduce_memory_usage()
                     st.rerun()
 
             # Auto-remove background and show processed preview
@@ -663,6 +667,7 @@ def main():
                 )
                 if clear_video == "clear":
                     st.session_state.generated_video = None
+                    reduce_memory_usage()
                     st.rerun()
             
             # Auto-extract GLB after video is shown
@@ -685,6 +690,7 @@ def main():
                 if clear_glb == "clear":
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
+                    reduce_memory_usage()
                     st.rerun()
 
                 # Download button
@@ -724,6 +730,8 @@ def main():
             st.session_state.generated_video = None
             st.session_state.generated_glb = None
             st.session_state.generated_state = None
+            # Force CUDA cleanup when loading example
+            reduce_memory_usage()
             st.rerun()
         
     with tab2:
