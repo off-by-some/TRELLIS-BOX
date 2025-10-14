@@ -286,11 +286,10 @@ class TrellisImageTo3DPipeline(Pipeline):
             target_size: Tuple of (width, height) for resizing images before conditioning
 
         Returns:
-            dict: Conditioning dictionary with 'cond', 'neg_cond', 'multi_view', and 'contradiction' keys.
-                Single image: cond shape (1, num_patches, hidden_dim), contradiction = 0.0
+            dict: Conditioning dictionary with 'cond', 'neg_cond', and 'multi_view' keys for model input.
+                Single image: cond shape (1, num_patches, hidden_dim)
                 Multi-view: cond is list of shapes [(1, num_patches, hidden_dim), ...]
                     to be cycled through during sampling steps.
-                    contradiction = K measure of multi-view consistency (0.0 = perfect consistency)
         """
         cond = self.encode_image(image, target_size)
 
@@ -305,14 +304,10 @@ class TrellisImageTo3DPipeline(Pipeline):
             cond_list = [cond[i:i+1] for i in range(cond.shape[0])]
             neg_cond_list = [torch.zeros_like(c) for c in cond_list]
 
-            # Compute contradiction measure for multi-view consistency assessment
-            contradiction = _compute_contradiction_measure(cond_list)
-
             return {
                 'cond': cond_list,
                 'neg_cond': neg_cond_list,
-                'multi_view': True,
-                'contradiction': contradiction
+                'multi_view': True
             }
         else:
             # Single image
@@ -322,9 +317,25 @@ class TrellisImageTo3DPipeline(Pipeline):
             return {
                 'cond': cond,
                 'neg_cond': neg_cond,
-                'multi_view': False,
-                'contradiction': 0.0
+                'multi_view': False
             }
+
+    def analyze_contradiction(self, cond_dict: dict) -> float:
+        """
+        Analyze the contradiction measure for multi-view conditioning.
+
+        Args:
+            cond_dict: Conditioning dictionary returned by get_cond()
+
+        Returns:
+            Contradiction measure K (0.0 = perfect consistency, higher = more contradictory)
+        """
+        if not cond_dict.get('multi_view', False):
+            return 0.0  # Single view has no contradiction
+
+        # Extract conditioning tensors for analysis
+        cond_list = cond_dict['cond']
+        return _compute_contradiction_measure(cond_list)
 
     def sample_sparse_structure(
         self,
@@ -375,10 +386,9 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.sparse_structure_sampler_params, **sampler_params}
         
-        # Sample sparse structure latent (only pass tensor/list arguments to model)
-        model_kwargs = {k: v for k, v in cond_typed.items() if k in ['cond', 'neg_cond']}
+        # Sample sparse structure latent
         z_s = self.sparse_structure_sampler.sample(
-            flow_model, noise, **model_kwargs, **params, verbose=True
+            flow_model, noise, **cond_typed, **params, verbose=True
         ).samples
         
         # Decode to binary occupancy grid and extract coordinates
@@ -520,10 +530,9 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.slat_sampler_params, **sampler_params}
         
-        # Sample latent features (only pass tensor/list arguments to model)
-        model_kwargs = {k: v for k, v in cond_typed.items() if k in ['cond', 'neg_cond']}
+        # Sample latent features
         slat = self.slat_sampler.sample(
-            flow_model, noise, **model_kwargs, **params, verbose=True
+            flow_model, noise, **cond_typed, **params, verbose=True
         ).samples
         
         # Denormalize latent features

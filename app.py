@@ -682,9 +682,11 @@ class ModelGenerator:
         with torch.inference_mode():
             cond = pipeline.get_cond(images, target_size=(st.session_state.get("resize_width", 518), st.session_state.get("resize_height", 518)))
 
+            # Analyze contradiction for multi-view inputs
+            contradiction = pipeline.analyze_contradiction(cond)
+
         # Display contradiction score for multi-view inputs
         if cond.get('multi_view', False):
-            contradiction = cond.get('contradiction', 0.0)
             if contradiction < 1.0:
                 st.success(f"Multi-view consistency: Good ({contradiction:.2f})")
             elif contradiction < 3.0:
