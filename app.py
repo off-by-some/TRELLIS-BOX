@@ -1038,15 +1038,17 @@ class SingleImageUI:
                         StateManager.set_generated_video(video_path)
                         StateManager.set_generated_state(state)
                         st.session_state.processed_image = processed_image
+                        
+                        # Reset generating flag before rerun
+                        StateManager.set_generating(False)
+                        st.rerun()
                 except Exception as e:
+                    StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
                     st.warning("Try reducing image size or restarting the application if memory errors persist.")
                     import traceback
                     with st.expander("Error Details"):
                         st.code(traceback.format_exc())
-                finally:
-                    StateManager.set_generating(False)
-                st.rerun()
         
         # Use shared output preview component
         SingleImageUI._render_output_preview(
@@ -1221,15 +1223,17 @@ class MultiImageUI:
                         
                         StateManager.set_generated_video(video_path)
                         StateManager.set_generated_state(state)
+                        
+                        # Reset generating flag before rerun
+                        StateManager.set_generating(False)
+                        st.rerun()
                 except Exception as e:
+                    StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
                     st.warning("Try reducing image size or restarting the application if memory errors persist.")
                     import traceback
                     with st.expander("Error Details"):
                         st.code(traceback.format_exc())
-                finally:
-                    StateManager.set_generating(False)
-                st.rerun()
     
     @staticmethod
     def _render_output_column() -> None:
