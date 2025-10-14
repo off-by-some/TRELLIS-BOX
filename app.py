@@ -558,8 +558,17 @@ def main():
                 st.rerun()
             
             # Handle uploaded image
-            if uploaded_file is not None and st.session_state.uploaded_image is None:
-                st.session_state.uploaded_image = Image.open(uploaded_file)
+            if uploaded_file is not None:
+                new_image = Image.open(uploaded_file)
+                # Check if this is a different image than what we have
+                if st.session_state.uploaded_image is None or st.session_state.uploaded_image != new_image:
+                    st.session_state.uploaded_image = new_image
+                    # Reset all generated content when new image is uploaded
+                    st.session_state.processed_preview = None
+                    st.session_state.generated_video = None
+                    st.session_state.generated_glb = None
+                    st.session_state.generated_state = None
+                    st.rerun()
 
             # Auto-remove background and show processed preview
             if st.session_state.uploaded_image is not None:

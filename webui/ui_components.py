@@ -106,9 +106,19 @@ def show_video_preview(video_path, show_clear=False, clear_key=None, show_progre
                 clear_clicked = True
     
     if video_path:
-        st.video(video_path, loop=True, autoplay=True)
-        with st.expander("ℹ️ Video Info", expanded=False):
-            st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
+        # Use a unique container to avoid duplicate element IDs
+        # Generate a unique identifier based on the video path and clear_key
+        import hashlib
+        video_hash = hashlib.md5(f"{video_path}_{clear_key}".encode()).hexdigest()[:8]
+        
+        # Create a container with unique key to isolate the video element
+        video_container = st.container()
+        with video_container:
+            # Add a hidden div with unique ID to help Streamlit differentiate
+            st.markdown(f'<div id="video_{video_hash}" style="display:none;"></div>', unsafe_allow_html=True)
+            st.video(video_path, loop=True, autoplay=True)
+            with st.expander("ℹ️ Video Info", expanded=False):
+                st.info("This video shows color rendering (left) and normal map (right) of your 3D model rotating.")
     else:
         # Show placeholder with optional progress bar
         placeholder = create_placeholder_video()
