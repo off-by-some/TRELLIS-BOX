@@ -36,10 +36,10 @@ services:
       - ${HOST_CACHE_DIR:-~/.cache/trellis}:${CACHE_DIR:-/home/appuser/.cache}
       # Persist Hugging Face cache
       - ${HOST_HF_CACHE_DIR:-~/.cache/huggingface}:${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
-      # Persist rembg model cache (use named volume to avoid permission issues)
-      - rembg-cache:${REMBG_CACHE_DIR:-/app/rembg_cache}
-      # Persist generated outputs (named volume for consistent permissions)
-      - trellis-outputs:${TRELLIS_OUTPUT_DIR:-/app/outputs}
+      # Persist rembg model cache to host
+      - ${HOST_REMBG_CACHE_DIR:-./rembg_cache}:${REMBG_CACHE_DIR:-/app/rembg_cache}
+      # Persist generated outputs to host
+      - ${OUTPUTS_HOST_DIR:-./outputs}:${TRELLIS_OUTPUT_DIR:-/app/outputs}
     environment:
       # Streamlit configuration
       - STREAMLIT_SERVER_PORT=${APP_PORT:-8501}
