@@ -949,8 +949,12 @@ class SingleImageUI:
                     type="primary",
                     key=download_key
                 )
-        elif generated_video and not generated_glb and generated_state:
-            # Auto-extract GLB in background
+        else:
+            # Show placeholder when no GLB
+            show_3d_model_viewer(None)
+        
+        # Auto-extract GLB after video is shown (runs on next render after video appears)
+        if generated_video and not generated_glb and generated_state:
             with st.spinner("Extracting GLB..."):
                 # Determine which tab we're in based on the video_key
                 if video_key == "single_video":
@@ -969,9 +973,6 @@ class SingleImageUI:
                 StateManager.set_generated_glb(glb_path)
                 st.success("✅ 3D model complete!")
                 st.rerun()
-        else:
-            # Show placeholder when no GLB
-            show_3d_model_viewer(None)
         
         # Retry button (shown when video is available)
         if generated_video and not is_generating:
