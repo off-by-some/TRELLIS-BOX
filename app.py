@@ -905,10 +905,14 @@ class SingleImageUI:
         """
         # Video preview
         with st.container():
+            # Show progress if generating
+            is_generating = StateManager.is_generating()
             clear_video = show_video_preview(
                 StateManager.get_generated_video(),
                 show_clear=True,
-                clear_key=video_key
+                clear_key=video_key,
+                show_progress=is_generating,
+                progress_text="Generating 3D model..." if is_generating else None
             )
             if clear_video == "clear":
                 StateManager.set_generated_video(None)
