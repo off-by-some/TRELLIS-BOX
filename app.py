@@ -17,8 +17,9 @@ warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 os.environ['SPCONV_ALGO'] = 'native'
-# Memory optimizations for Trellis workloads - conservative but effective settings
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512,garbage_collection_threshold:0.8'
+# Memory optimizations for Trellis workloads - enable expandable segments to reduce fragmentation
+# This allows PyTorch to better manage memory allocation and reduce OOM errors
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True,max_split_size_mb:512,garbage_collection_threshold:0.8'
 # CUDA optimizations
 os.environ['CUDA_LAUNCH_BLOCKING'] = '0'  # Non-blocking launches
 

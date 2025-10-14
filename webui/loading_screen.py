@@ -16,6 +16,18 @@ warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 def show_loading_screen(gpu_info="Unknown GPU"):
     """Display the loading screen while initializing TRELLIS pipeline."""
+    import base64
+    from pathlib import Path
+    
+    # Load and encode the banner image
+    banner_path = Path("docs/trellis-docker-image.png")
+    if banner_path.exists():
+        with open(banner_path, "rb") as f:
+            banner_data = base64.b64encode(f.read()).decode()
+        banner_img = f'data:image/png;base64,{banner_data}'
+    else:
+        banner_img = None
+    
     # Hide default streamlit elements for cleaner loading screen
     st.markdown("""
     <style>
@@ -65,19 +77,13 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         background: rgba(102, 126, 234, 0.05);
     }}
     
-    .glass-overlay h1 {{
-        color: #667eea;
-        font-size: 2.4rem;
-        margin-bottom: 0.8rem;
-        font-weight: 700;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-    }}
-    
-    .glass-overlay h2 {{
-        color: #764ba2;
-        font-size: 1.44rem;
-        margin-bottom: 1.2rem;
-        font-weight: 500;
+    .banner-image {{
+        max-width: 400px;
+        width: 100%;
+        height: auto;
+        margin: 0 auto 1rem auto;
+        display: block;
+        animation: pulse 2s ease-in-out infinite;
     }}
     
     .glass-overlay p {{
@@ -111,15 +117,13 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     <div class="loading-container">
         <div class="glass-overlay" onclick="this.style.opacity='0'; this.style.pointerEvents='none';">
-            <h1>🚀 TRELLIS</h1>
-            <h2>3D Generation Pipeline</h2>
+            {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS Banner">' if banner_img else '<h1 style="color: #667eea; font-size: 2.4rem; margin-bottom: 0.8rem;">TRELLIS</h1>'}
             <p>
                 Initializing AI models and CUDA environment<br>
                 <strong>First run may take 2-5 minutes</strong>
             </p>
-            <div class="loading-icon">⏳</div>
             <div class="gpu-info">
-                <strong>🎮 GPU:</strong> {gpu_info}
+                <strong>GPU:</strong> {gpu_info}
             </div>
         </div>
     </div>

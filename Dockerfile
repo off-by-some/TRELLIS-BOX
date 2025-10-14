@@ -211,6 +211,7 @@ COPY assets/ ./assets/
 COPY app.py ./
 COPY webui/ ./webui/
 COPY .streamlit/ ./.streamlit/
+COPY docs/ ./docs/
 
 # Create diagnostic script
 RUN <<EOF
