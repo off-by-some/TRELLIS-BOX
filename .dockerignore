@@ -3,6 +3,11 @@
 .gitignore
 .gitattributes
 
+# Environment files
+.env
+.env.*
+!docker.env.example
+
 # Python cache
 __pycache__/
 *.py[cod]

@@ -1,0 +1,343 @@
+# Docker Configuration Guide
+
+This guide explains how to configure and customize the Trellis 3D Docker image build and runtime.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Configuration Variables](#configuration-variables)
+- [Configuration Methods](#configuration-methods)
+- [Common Use Cases](#common-use-cases)
+- [Build Optimization](#build-optimization)
+
+## Quick Start
+
+### Default Build
+
+```bash
+# Using the build script (recommended)
+./scripts/build.sh
+
+# Or using docker-compose
+docker-compose build
+
+# Or using docker directly
+DOCKER_BUILDKIT=1 docker build -t trellis-box:latest .
+```
+
+### Custom Build
+
+```bash
+# Option 1: Using environment variables with the build script
+CUDA_VERSION=12.2.0 PYTHON_VERSION=3.11 ./scripts/build.sh
+
+# Option 2: Using a .env file with docker-compose
+cp docker.env.example .env
+# Edit .env with your preferred settings
+docker-compose build
+
+# Option 3: Using --build-arg with docker
+docker build \
+  --build-arg CUDA_VERSION=12.2.0 \
+  --build-arg PYTHON_VERSION=3.11 \
+  --build-arg APP_PORT=8080 \
+  -t trellis-box:custom .
+```
+
+## Configuration Variables
+
+### CUDA and System
+
+| Variable | Default | Description | Example Values |
+|----------|---------|-------------|----------------|
+| `CUDA_VERSION` | `12.1.0` | NVIDIA CUDA version | `12.0.1`, `12.1.0`, `12.2.0` |
+| `CUDNN_VERSION` | `8` | cuDNN version | `8`, `9` |
+| `UBUNTU_VERSION` | `22.04` | Ubuntu base version | `20.04`, `22.04` |
+| `PYTHON_VERSION` | `3.10` | Python version | `3.10`, `3.11` |
+
+### Python Packages
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POETRY_VERSION` | `1.8.3` | Poetry package manager version |
+| `TORCH_VERSION` | `2.4.0` | PyTorch version (for reference) |
+| `KAOLIN_VERSION` | `0.17.0` | NVIDIA Kaolin library version |
+
+### Application
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_USER` | `appuser` | Non-root user inside container |
+| `APP_UID` | `1000` | User ID (match with host for permissions) |
+| `APP_PORT` | `8501` | Streamlit application port |
+| `HOST_PORT` | `8501` | Port exposed on host (compose only) |
+
+### GPU Runtime
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CUDA_VISIBLE_DEVICES` | `all` | Which GPUs to use |
+| `GPU_COUNT` | `all` | Number of GPUs to allocate |
+
+### Docker Image
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAGE_NAME` | `trellis-box` | Docker image name |
+| `IMAGE_TAG` | `latest` | Docker image tag |
+
+## Configuration Methods
+
+### Method 1: Environment Variables (Build Script)
+
+```bash
+# Set variables before running the script
+export CUDA_VERSION=12.2.0
+export PYTHON_VERSION=3.11
+export APP_PORT=8080
+
+./scripts/build.sh
+```
+
+Or inline:
+
+```bash
+CUDA_VERSION=12.2.0 PYTHON_VERSION=3.11 ./scripts/build.sh
+```
+
+### Method 2: .env File (Docker Compose)
+
+```bash
+# Create your .env file
+cp docker.env.example .env
+
+# Edit the .env file
+nano .env  # or vim, code, etc.
+
+# Build and run
+docker-compose up --build
+```
+
+### Method 3: Build Args (Direct Docker)
+
+```bash
+docker build \
+  --build-arg CUDA_VERSION=12.2.0 \
+  --build-arg PYTHON_VERSION=3.11 \
+  --build-arg APP_PORT=8080 \
+  -t trellis-box:custom .
+```
+
+### Method 4: Edit Dockerfile Directly
+
+Modify the default values in the `Dockerfile`:
+
+```dockerfile
+ARG CUDA_VERSION=12.2.0  # Change from 12.1.0
+ARG PYTHON_VERSION=3.11   # Change from 3.10
+```
+
+## Common Use Cases
+
+### Use Case 1: Different CUDA Version
+
+Your system has CUDA 12.2 instead of 12.1:
+
+```bash
+# Method A: Build script
+CUDA_VERSION=12.2.0 ./scripts/build.sh
+
+# Method B: Docker compose .env
+echo "CUDA_VERSION=12.2.0" >> .env
+docker-compose build
+```
+
+### Use Case 2: Match Host User ID
+
+Fix file permission issues by matching container UID to host UID:
+
+```bash
+# Get your user ID
+MY_UID=$(id -u)
+
+# Build with your UID
+APP_UID=$MY_UID ./scripts/build.sh
+
+# Or add to .env
+echo "APP_UID=$MY_UID" >> .env
+```
+
+### Use Case 3: Run on Different Port
+
+You have another service on port 8501:
+
+```bash
+# Using .env file
+cat > .env << EOF
+APP_PORT=8080
+HOST_PORT=8080
+EOF
+
+docker-compose up --build
+```
+
+Then access at `http://localhost:8080`
+
+### Use Case 4: Multi-GPU with Specific GPUs
+
+Use only GPUs 0 and 1 out of 4 available:
+
+```bash
+# Add to .env
+cat > .env << EOF
+CUDA_VISIBLE_DEVICES=0,1
+GPU_COUNT=2
+EOF
+
+docker-compose up
+```
+
+### Use Case 5: Development vs Production Builds
+
+```bash
+# Development (faster rebuilds)
+IMAGE_TAG=dev ./scripts/build.sh
+
+# Production (specific version)
+IMAGE_TAG=v1.0.0 ./scripts/build.sh --no-cache
+```
+
+## Build Optimization
+
+### Faster Rebuilds with BuildKit Cache
+
+The Dockerfile uses BuildKit cache mounts for faster rebuilds:
+
+```bash
+# Enable BuildKit (usually enabled by default)
+export DOCKER_BUILDKIT=1
+
+# Build with cache
+./scripts/build.sh
+
+# Subsequent builds reuse cached layers
+./scripts/build.sh  # Much faster!
+```
+
+### Force Clean Build
+
+```bash
+# Using build script
+./scripts/build.sh --no-cache
+
+# Using docker-compose
+docker-compose build --no-cache
+
+# Using docker
+docker build --no-cache -t trellis-box .
+```
+
+### Multi-Stage Build Benefits
+
+The Dockerfile uses multi-stage builds:
+
+- **Builder stage**: Has all development tools and build dependencies
+- **Runtime stage**: Only includes what's needed to run the app
+
+This results in:
+- ✅ Smaller final image (~30-40% reduction)
+- ✅ Faster deployments
+- ✅ Better security (fewer packages = smaller attack surface)
+
+### Layer Caching Strategy
+
+Layers are ordered by change frequency:
+
+1. System dependencies (rarely change)
+2. Poetry and Python packages (change when pyproject.toml changes)
+3. Application code (changes frequently)
+
+This means editing your Python code won't trigger a full dependency reinstall.
+
+## Troubleshooting
+
+### Issue: Permission Denied on Volumes
+
+**Solution**: Match APP_UID to your host user ID
+
+```bash
+APP_UID=$(id -u) ./scripts/build.sh
+```
+
+### Issue: CUDA Version Mismatch
+
+**Error**: `CUDA version mismatch` or `driver version is insufficient`
+
+**Solution**: Check your NVIDIA driver version and use compatible CUDA:
+
+```bash
+nvidia-smi  # Check driver version
+
+# Use appropriate CUDA version
+CUDA_VERSION=12.0.1 ./scripts/build.sh
+```
+
+### Issue: Build Fails on Kaolin
+
+**Solution**: Kaolin requires specific CUDA and PyTorch versions. Ensure compatibility:
+
+- PyTorch 2.4.0 → CUDA 12.1
+- Check [Kaolin compatibility](https://github.com/NVIDIAGameWorks/kaolin)
+
+### Issue: Port Already in Use
+
+**Error**: `port is already allocated`
+
+**Solution**: Use a different host port
+
+```bash
+HOST_PORT=8502 docker-compose up
+```
+
+## Advanced Configuration
+
+### Custom Wheel Files
+
+If you have custom `.whl` files, place them in the `wheels/` directory before building:
+
+```bash
+ls wheels/
+# diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl
+# nvdiffrast-0.3.3-cp310-cp310-linux_x86_64.whl
+# your-custom-package.whl
+
+./scripts/build.sh
+```
+
+### Modify Poetry Dependencies
+
+1. Edit `pyproject.toml` to add/update dependencies
+2. Rebuild the image:
+
+```bash
+./scripts/build.sh
+```
+
+The build automatically runs `poetry install` with the updated dependencies.
+
+## Best Practices
+
+1. **Version Pin Everything**: Use specific versions for reproducible builds
+2. **Use .env for Secrets**: Never commit `.env` files with sensitive data
+3. **Match Host UID**: Set `APP_UID=$(id -u)` to avoid permission issues
+4. **Tag Your Images**: Use meaningful tags like `v1.0.0` or `prod` instead of just `latest`
+5. **Test Before Deploy**: Build and test locally before deploying to production
+6. **Document Changes**: If you modify defaults, document why in your project
+
+## Resources
+
+- [Docker BuildKit Documentation](https://docs.docker.com/build/buildkit/)
+- [Multi-stage Builds](https://docs.docker.com/build/building/multi-stage/)
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
+- [Docker Compose Reference](https://docs.docker.com/compose/compose-file/)
+
