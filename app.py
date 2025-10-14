@@ -577,6 +577,7 @@ class ModelGenerator:
                     seed=seed,
                     formats=["gaussian", "mesh"],
                     preprocess_image=False,
+                    target_size=(resize_width, resize_height),
                     sparse_structure_sampler_params={
                         "steps": params.ss_sampling_steps,
                         "cfg_strength": params.ss_guidance_strength,
@@ -679,7 +680,7 @@ class ModelGenerator:
         # Get multi-view conditioning by passing all images at once
         pipeline = StateManager.get_pipeline()
         with torch.inference_mode():
-            cond = pipeline.get_cond(images)
+            cond = pipeline.get_cond(images, target_size=(resize_width, resize_height))
 
         # Display contradiction score for multi-view inputs
         if cond.get('multi_view', False):
@@ -940,7 +941,31 @@ class SingleImageUI:
                     help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
                     key=refinement_key
                 )
-                
+
+                # Resize dimensions for conditioning model
+                st.markdown("**Resize Dimensions**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    resize_width = st.number_input(
+                        "Width",
+                        min_value=256,
+                        max_value=1024,
+                        value=518,
+                        step=64,
+                        help="Width to resize images to for conditioning model",
+                        key=f"resize_width_{trial_id}"
+                    )
+                with col2:
+                    resize_height = st.number_input(
+                        "Height",
+                        min_value=256,
+                        max_value=1024,
+                        value=518,
+                        step=64,
+                        help="Height to resize images to for conditioning model",
+                        key=f"resize_height_{trial_id}"
+                    )
+
                 # Batch size for multi-image only
                 if is_multi_image and batch_size_key:
                     batch_size = st.slider(

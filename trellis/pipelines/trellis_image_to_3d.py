@@ -158,11 +158,18 @@ class TrellisImageTo3DPipeline(Pipeline):
         ])
         self.image_cond_model_transform = transform
 
-    def preprocess_image(self, input: Image.Image) -> Image.Image:
+    def preprocess_image(self, input: Image.Image, target_size: Tuple[int, int] = (518, 518)) -> Image.Image:
         """
-        Preprocess input image: remove background, crop, and resize to 518x518.
-        
+        Preprocess input image: remove background, crop, and resize to target dimensions.
+
         Resizes large images before background removal to prevent OOM errors.
+
+        Args:
+            input: Input PIL image
+            target_size: Tuple of (width, height) for final resize dimensions
+
+        Returns:
+            Preprocessed PIL image
         """
         # Resize images where either dimension exceeds 1024 to prevent OOM
         # Only resize if necessary, preserving original size for smaller images
@@ -226,7 +233,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         output = output.crop(bbox)
         
         # Resize to target resolution with high-quality resampling
-        output = output.resize((518, 518), Image.Resampling.LANCZOS)
+        output = output.resize(target_size, Image.Resampling.LANCZOS)
         
         # Apply alpha compositing directly on PIL image to avoid quality loss
         # Convert to RGBA if needed, then composite onto white background
@@ -243,12 +250,13 @@ class TrellisImageTo3DPipeline(Pipeline):
         return composited.convert('RGB')
 
     @torch.no_grad()
-    def encode_image(self, image: Union[torch.Tensor, list[Image.Image]]) -> torch.Tensor:
+    def encode_image(self, image: Union[torch.Tensor, list[Image.Image]], target_size: Tuple[int, int] = (518, 518)) -> torch.Tensor:
         """
         Encode the image.
 
         Args:
             image (Union[torch.Tensor, list[Image.Image]]): The image to encode
+            target_size: Tuple of (width, height) for resizing images before encoding
 
         Returns:
             torch.Tensor: The encoded features.
@@ -257,7 +265,7 @@ class TrellisImageTo3DPipeline(Pipeline):
             assert image.ndim == 4, "Image tensor should be batched (B, C, H, W)"
         elif isinstance(image, list):
             assert all(isinstance(i, Image.Image) for i in image), "Image list should be list of PIL images"
-            image = [i.resize((518, 518), Image.LANCZOS) for i in image]
+            image = [i.resize(target_size, Image.LANCZOS) for i in image]
             image = [np.array(i.convert('RGB')).astype(np.float32) / 255 for i in image]
             image = [torch.from_numpy(i).permute(2, 0, 1).float() for i in image]
             image = torch.stack(image).to(self.device)
@@ -269,12 +277,13 @@ class TrellisImageTo3DPipeline(Pipeline):
         patchtokens = F.layer_norm(features, features.shape[-1:])
         return patchtokens
         
-    def get_cond(self, image: Union[torch.Tensor, list[Image.Image]]) -> dict:
+    def get_cond(self, image: Union[torch.Tensor, list[Image.Image]], target_size: Tuple[int, int] = (518, 518)) -> dict:
         """
         Get the conditioning information for the model.
 
         Args:
             image: Single image or list of images for multi-view conditioning.
+            target_size: Tuple of (width, height) for resizing images before conditioning
 
         Returns:
             dict: Conditioning dictionary with 'cond', 'neg_cond', 'multi_view', and 'contradiction' keys.
@@ -283,7 +292,7 @@ class TrellisImageTo3DPipeline(Pipeline):
                     to be cycled through during sampling steps.
                     contradiction = K measure of multi-view consistency (0.0 = perfect consistency)
         """
-        cond = self.encode_image(image)
+        cond = self.encode_image(image, target_size)
 
         # Handle single vs multiple images
         if isinstance(image, list) and len(image) > 1:
@@ -366,8 +375,8 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.sparse_structure_sampler_params, **sampler_params}
         
-        # Sample sparse structure latent (only pass tensor arguments to model)
-        model_kwargs = {k: v for k, v in cond_typed.items() if hasattr(v, 'to') or isinstance(v, list)}
+        # Sample sparse structure latent (only pass tensor/list arguments to model)
+        model_kwargs = {k: v for k, v in cond_typed.items() if k in ['cond', 'neg_cond']}
         z_s = self.sparse_structure_sampler.sample(
             flow_model, noise, **model_kwargs, **params, verbose=True
         ).samples
@@ -511,8 +520,8 @@ class TrellisImageTo3DPipeline(Pipeline):
 
         params = {**self.slat_sampler_params, **sampler_params}
         
-        # Sample latent features (only pass tensor arguments to model)
-        model_kwargs = {k: v for k, v in cond_typed.items() if hasattr(v, 'to') or isinstance(v, list)}
+        # Sample latent features (only pass tensor/list arguments to model)
+        model_kwargs = {k: v for k, v in cond_typed.items() if k in ['cond', 'neg_cond']}
         slat = self.slat_sampler.sample(
             flow_model, noise, **model_kwargs, **params, verbose=True
         ).samples
@@ -543,6 +552,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         slat_sampler_params: dict = {},
         formats: List[str] = ['mesh', 'gaussian', 'radiance_field'],
         preprocess_image: bool = True,
+        target_size: Tuple[int, int] = (518, 518),
     ) -> dict:
         """
         Run the pipeline.
@@ -556,6 +566,7 @@ class TrellisImageTo3DPipeline(Pipeline):
             slat_sampler_params: Additional parameters for structured latent sampler.
             formats: Output formats to generate (['mesh', 'gaussian', 'radiance_field']).
             preprocess_image: Whether to preprocess images (background removal, cropping).
+            target_size: Tuple of (width, height) for resizing images before conditioning.
 
         Returns:
             Dictionary with requested 3D representations (mesh, gaussian, radiance_field).
@@ -563,12 +574,12 @@ class TrellisImageTo3DPipeline(Pipeline):
         # Handle both single image and list of images
         if isinstance(image, list):
             if preprocess_image:
-                image = [self.preprocess_image(img) for img in image]
-            cond = self.get_cond(image)
+                image = [self.preprocess_image(img, target_size) for img in image]
+            cond = self.get_cond(image, target_size)
         else:
             if preprocess_image:
-                image = self.preprocess_image(image)
-            cond = self.get_cond([image])
+                image = self.preprocess_image(image, target_size)
+            cond = self.get_cond([image], target_size)
         
         torch.manual_seed(seed)
         coords = self.sample_sparse_structure(cond, num_samples, sparse_structure_sampler_params)
