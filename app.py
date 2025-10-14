@@ -2,9 +2,9 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import os
-from loading_screen import show_loading_screen, finalize_loading
-from initialize_pipeline import load_pipeline, reduce_memory_usage
-from ui_components import show_image_preview, show_video_preview, show_3d_model_viewer
+from webui.loading_screen import show_loading_screen, finalize_loading
+from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
+from webui.ui_components import show_image_preview, show_video_preview, show_3d_model_viewer
 import base64
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads - conservative but effective settings

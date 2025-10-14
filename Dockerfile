@@ -206,7 +206,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY trellis/ ./trellis/
 COPY extensions/ ./extensions/
 COPY assets/ ./assets/
-COPY app.py loading_screen.py initialize_pipeline.py ui_components.py ./
+COPY app.py ./
+COPY webui/ ./webui/
 
 # Create diagnostic script
 RUN <<EOF
@@ -285,11 +286,35 @@ set -e
 useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER}
 chown -R ${APP_USER}:${APP_USER} /app
 mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
-chmod -R 777 ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
-chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chmod -R 777 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+
+# Ensure u2net cache directory exists and has proper permissions
+mkdir -p ${REMBG_CACHE_DIR}
+chmod 777 ${REMBG_CACHE_DIR}
+
+# Ensure any existing cache files have proper permissions
+find ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} -type f -exec chmod 666 {} \; 2>/dev/null || true
+find ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} -type d -exec chmod 777 {} \; 2>/dev/null || true
 EOF
 
 USER ${APP_USER}
+
+# Pre-download u2net model to avoid permission issues at runtime
+RUN <<EOF
+set -e
+python3 -c "
+import os
+os.environ['U2NET_HOME'] = '${REMBG_CACHE_DIR}'
+try:
+    import rembg
+    print('Pre-downloading u2net model...')
+    session = rembg.new_session('u2net')
+    print('u2net model downloaded successfully')
+except Exception as e:
+    print(f'Failed to download u2net model: {e}')
+"
+EOF
 
 # Expose Streamlit port
 EXPOSE ${APP_PORT}
