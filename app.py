@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
+import time
 import os
 import warnings
 from webui.loading_screen import show_loading_screen, finalize_loading
@@ -1360,6 +1361,43 @@ class TrellisApp:
         """Run the main application."""
         # Perform periodic cleanup
         MemoryManager.periodic_cleanup()
+        
+        # Sidebar with advanced options
+        with st.sidebar:
+            st.header("⚙️ Advanced Options")
+            
+            # Pipeline status
+            pipeline = StateManager.get_pipeline()
+            if pipeline is not None:
+                st.success("✅ Pipeline Loaded")
+                if torch.cuda.is_available():
+                    allocated_gb = torch.cuda.memory_allocated() / (1024**3)
+                    reserved_gb = torch.cuda.memory_reserved() / (1024**3)
+                    st.metric("GPU Memory", f"{allocated_gb:.2f} GB", f"{reserved_gb:.2f} GB reserved")
+            else:
+                st.warning("⏳ Pipeline Loading...")
+            
+            st.divider()
+            
+            # Cache management
+            st.subheader("🗑️ Cache Management")
+            st.caption("Use these tools if you encounter memory issues")
+            
+            if st.button("Clear Pipeline Cache", type="secondary", use_container_width=True):
+                with st.spinner("Clearing pipeline cache..."):
+                    from webui.initialize_pipeline import clear_pipeline_cache
+                    clear_pipeline_cache()
+                    StateManager.set_pipeline(None)
+                    st.success("Cache cleared! Refreshing...")
+                    time.sleep(1)
+                    st.rerun()
+            
+            if st.button("Clear All Session Data", type="secondary", use_container_width=True):
+                with st.spinner("Clearing session data..."):
+                    MemoryManager.cleanup_session_state(clear_all=True)
+                    st.success("Session data cleared!")
+                    time.sleep(1)
+                    st.rerun()
         
         # Display title and description
         st.title("Image to 3D Asset with TRELLIS")
