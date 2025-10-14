@@ -16,43 +16,116 @@ warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 def show_loading_screen():
     """Display the loading screen while initializing TRELLIS pipeline."""
-    # Show loading screen with spinner
-    st.title("🚀 TRELLIS 3D Generator")
-    st.markdown("## Initializing Application...")
-
-    # Create a nice loading interface
-    col1, col2, col3 = st.columns([1, 2, 1])
-
-    with col2:
-        st.markdown("""
-        <div style="
-            text-align: center;
-            padding: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 15px;
-            color: white;
-            margin: 2rem 0;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        ">
-            <h2 style="margin-bottom: 1rem;">Initializing TRELLIS</h2>
-            <p style="margin-bottom: 1rem; opacity: 0.9;">
-                Loading AI models and preparing 3D generation pipeline.<br>
-                This may take 2-5 minutes on first run.
+    # Hide default streamlit elements for cleaner loading screen
+    st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Console output container (behind the glass overlay)
+    console_output = st.empty()
+    
+    # Glassmorphic overlay banner
+    st.markdown("""
+    <style>
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+    }
+    
+    .loading-container {
+        position: relative;
+        width: 100%;
+        min-height: 500px;
+        margin: 2rem 0;
+    }
+    
+    .glass-overlay {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80%;
+        max-width: 800px;
+        padding: 3rem;
+        background: rgba(102, 126, 234, 0.15);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        z-index: 1000;
+        text-align: center;
+        transition: all 0.5s ease;
+        cursor: pointer;
+    }
+    
+    .glass-overlay:hover {
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        background: rgba(102, 126, 234, 0.05);
+    }
+    
+    .glass-overlay h1 {
+        color: #667eea;
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        font-weight: 700;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .glass-overlay h2 {
+        color: #764ba2;
+        font-size: 1.8rem;
+        margin-bottom: 1.5rem;
+        font-weight: 500;
+    }
+    
+    .glass-overlay p {
+        color: #333;
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+    }
+    
+    .loading-icon {
+        font-size: 4rem;
+        animation: pulse 2s ease-in-out infinite;
+        margin: 1rem 0;
+    }
+    
+    .hint-text {
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 2rem;
+        font-style: italic;
+    }
+    </style>
+    
+    <div class="loading-container">
+        <div class="glass-overlay" onclick="this.style.opacity='0'; this.style.pointerEvents='none';">
+            <h1>🚀 TRELLIS</h1>
+            <h2>3D Generation Pipeline</h2>
+            <p>
+                Initializing AI models and CUDA environment<br>
+                <strong>First run may take 2-5 minutes</strong>
             </p>
-            <div style="font-size: 3rem;">⏳</div>
+            <div class="loading-icon">⏳</div>
+            <p class="hint-text">💡 Click or hover to see live terminal output</p>
         </div>
-        """, unsafe_allow_html=True)
-
-        # Progress indicators
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        # Console output display
-        with st.expander("📋 Loading Details", expanded=False):
-            console_output = st.empty()
-
-        start_time = time.time()
-        return progress_bar, status_text, console_output, start_time
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Progress indicators below the glass overlay
+    st.markdown("---")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    start_time = time.time()
+    return progress_bar, status_text, console_output, start_time
 
 
 @contextlib.contextmanager
