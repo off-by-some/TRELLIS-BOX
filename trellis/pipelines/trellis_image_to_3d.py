@@ -46,7 +46,10 @@ def _compute_contradiction_measure(cond_list: List[torch.Tensor]) -> float:
     view as a different "context" and measure how much they contradict any
     single global frame-independent model.
 
-    K = -log₂(min_{contexts} BC(p_i, p_j))
+    Uses efficient approximation: computes cosine similarity on mean-pooled
+    conditioning features, then converts to BC-like measure.
+
+    K = -log₂(min_{contexts} similarity(p_i, p_j))
 
     Args:
         cond_list: List of conditioning tensors, each shape (1, num_patches, hidden_dim)
@@ -57,24 +60,35 @@ def _compute_contradiction_measure(cond_list: List[torch.Tensor]) -> float:
     if len(cond_list) < 2:
         return 0.0  # Single view has no contradiction
 
-    min_bc = float('inf')
+    # Efficient computation: mean-pool across patches to get global representation
+    # Shape: (num_views, hidden_dim)
+    global_features = torch.stack([cond.mean(dim=1).squeeze(0) for cond in cond_list])
 
-    # Compute pairwise BC between all conditioning views
-    for i in range(len(cond_list)):
-        for j in range(i + 1, len(cond_list)):
-            # Treat conditioning tensors as distributions over patch tokens
-            # Normalize each conditioning tensor to sum to 1
-            p = F.softmax(cond_list[i].flatten(), dim=0)
-            q = F.softmax(cond_list[j].flatten(), dim=0)
+    # Compute pairwise cosine similarities (vectorized)
+    # Normalize features
+    global_features = F.normalize(global_features, dim=1)
 
-            bc = torch.sum(torch.sqrt(p * q)).item()
-            min_bc = min(min_bc, bc)
+    # Compute similarity matrix: (num_views, num_views)
+    similarity_matrix = torch.mm(global_features, global_features.t())
 
-    # Apply weakest link principle: contradiction determined by most inconsistent pair
-    if min_bc <= 0:
+    # Extract upper triangular similarities (excluding diagonal)
+    num_views = len(cond_list)
+    similarities = []
+    for i in range(num_views):
+        for j in range(i + 1, num_views):
+            similarities.append(similarity_matrix[i, j].item())
+
+    # Use minimum similarity as approximation of BC
+    min_similarity = min(similarities) if similarities else 1.0
+
+    # Convert similarity to BC-like scale [0, 1] and apply weakest link principle
+    # Cosine similarity ∈ [-1, 1], we map to [0, 1] where 1 = perfect similarity
+    bc_approx = (min_similarity + 1.0) / 2.0
+
+    if bc_approx <= 0:
         return float('inf')  # Complete contradiction
 
-    return -np.log2(min_bc)
+    return -np.log2(bc_approx)
 
 
 class TrellisImageTo3DPipeline(Pipeline):
