@@ -836,18 +836,6 @@ class SingleImageUI:
             label_visibility="visible"
         )
         
-        # Show original image with clear button
-        if image_preview(
-            StateManager.get_uploaded_image(),
-            component_id="single_original",
-            title="📷 Original Image",
-            show_clear=True,
-            show_info=True
-        ):
-            # Clear action triggered
-            MemoryManager.cleanup_session_state(clear_all=True)
-            st.rerun()
-        
         # Handle uploaded image
         if uploaded_file is not None:
             new_image = Image.open(uploaded_file)
@@ -864,30 +852,23 @@ class SingleImageUI:
                 MemoryManager.cleanup_session_state(clear_all=False)
                 st.rerun()
         
-        # Auto-remove background and show processed preview
+        # Show uploaded image
         uploaded_image = StateManager.get_uploaded_image()
         if uploaded_image is not None:
+            st.markdown("**Uploaded Image:**")
+            st.image(uploaded_image, use_container_width=True)
+            
+            # Auto-process in background for generation
             pipeline = StateManager.get_pipeline()
             if pipeline is not None:
                 with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                     processed_image = pipeline.preprocess_image(uploaded_image)
-
-                # Show processed image
-                image_preview(
-                    processed_image,
-                    component_id="single_processed",
-                    title="🎨 Background Removed (Auto)",
-                    show_clear=False,
-                    show_info=True
-                )
-
                 # Store preview but clean up old reference first
                 if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
                     old_preview = st.session_state.processed_preview
                     del old_preview
                 st.session_state.processed_preview = processed_image
             else:
-                st.info("Background removal preview will be shown after pipeline loads")
                 st.session_state.processed_preview = None
     
     @staticmethod
@@ -1238,7 +1219,8 @@ class MultiImageUI:
             "Upload Images (2-4 images)",
             type=["png", "jpg", "jpeg"],
             accept_multiple_files=True,
-            key="multi_images"
+            key="multi_images",
+            label_visibility="visible"
         )
         
         if multi_uploaded_files:
@@ -1248,14 +1230,12 @@ class MultiImageUI:
                 st.warning("Maximum 4 images allowed. Using first 4.")
                 multi_uploaded_files = multi_uploaded_files[:4]
             
-            # Display uploaded images
+            # Display uploaded images (same style as single-image)
             if len(multi_uploaded_files) >= 2:
                 st.markdown("**Uploaded Images:**")
-                image_cols = st.columns(min(len(multi_uploaded_files), 4))
                 for i, uploaded_file in enumerate(multi_uploaded_files):
-                    with image_cols[i]:
-                        image = Image.open(uploaded_file)
-                        st.image(image, caption=f"Image {i+1}", width=150)
+                    image = Image.open(uploaded_file)
+                    st.image(image, caption=f"Image {i+1}", use_container_width=True)
     
     @staticmethod
     def _render_output_column() -> None:
