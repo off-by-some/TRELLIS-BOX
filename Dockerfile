@@ -38,8 +38,10 @@ COPY wheels/ ./wheels/
 # Install Python dependencies with caching
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --only main --no-interaction --no-ansi && \
-    pip install --no-cache-dir kaolin==0.17.0 && \
+    poetry install --only main --no-interaction --no-ansi && 
+
+# Install kaolin and wheels
+RUN pip install --no-cache-dir kaolin==0.17.0 && \
     pip install --no-cache-dir wheels/*.whl
 
 # Runtime stage - smaller image
