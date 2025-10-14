@@ -58,8 +58,8 @@ docker build \
 
 | Variable | Default | Description | Example Values |
 |----------|---------|-------------|----------------|
-| `CUDA_VERSION` | `12.1.0` | NVIDIA CUDA version | `12.0.1`, `12.1.0`, `12.2.0` |
-| `CUDNN_VERSION` | `8` | cuDNN version | `8`, `9` |
+| `CUDA_VERSION` | `12.4.1` | NVIDIA CUDA version | `12.4.1`, `12.5.1`, `12.6.0` |
+| `CUDNN_VERSION` | `9` | cuDNN version | `8`, `9` |
 | `UBUNTU_VERSION` | `22.04` | Ubuntu base version | `20.04`, `22.04` |
 | `PYTHON_VERSION` | `3.10` | Python version | `3.10`, `3.11` |
 
@@ -81,6 +81,8 @@ docker build \
 | `APP_UID` | `1000` | User ID (match with host for permissions) |
 | `APP_PORT` | `8501` | Streamlit application port |
 | `HOST_PORT` | `8501` | Port exposed on host (compose only) |
+| `STREAMLIT_SERVER_ADDRESS` | `0.0.0.0` | Streamlit bind address |
+| `STREAMLIT_SERVER_HEADLESS` | `true` | Run without browser auto-open |
 
 ### Cache Directories
 
@@ -164,16 +166,18 @@ ARG PYTHON_VERSION=3.11   # Change from 3.10
 
 ### Use Case 1: Different CUDA Version
 
-Your system has CUDA 12.2 instead of 12.1:
+Your system has CUDA 12.6 instead of 12.4:
 
 ```bash
 # Method A: Build script
-CUDA_VERSION=12.2.0 ./scripts/build.sh
+CUDA_VERSION=12.6.0 ./scripts/build.sh
 
 # Method B: Docker compose .env
-echo "CUDA_VERSION=12.2.0" >> .env
+echo "CUDA_VERSION=12.6.0" >> .env
 docker-compose build
 ```
+
+**Note:** Check [NVIDIA CUDA Docker Hub](https://hub.docker.com/r/nvidia/cuda/tags) for available versions and their support status.
 
 ### Use Case 2: Match Host User ID
 

@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
       args:
         # Override these in .env file or here
-        CUDA_VERSION: ${CUDA_VERSION:-12.1.0}
-        CUDNN_VERSION: ${CUDNN_VERSION:-8}
+        CUDA_VERSION: ${CUDA_VERSION:-12.4.1}
+        CUDNN_VERSION: ${CUDNN_VERSION:-9}
         UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
         PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
         POETRY_VERSION: ${POETRY_VERSION:-1.8.3}
@@ -18,6 +18,8 @@ services:
         APP_USER: ${APP_USER:-appuser}
         APP_UID: ${APP_UID:-1000}
         APP_PORT: ${APP_PORT:-8501}
+        STREAMLIT_SERVER_ADDRESS: ${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
+        STREAMLIT_SERVER_HEADLESS: ${STREAMLIT_SERVER_HEADLESS:-true}
         CACHE_DIR: ${CACHE_DIR:-/home/appuser/.cache}
         HF_CACHE_DIR: ${HF_CACHE_DIR:-/home/appuser/.cache/huggingface}
         REMBG_CACHE_DIR: ${REMBG_CACHE_DIR:-/home/appuser/.u2net}
@@ -36,6 +38,10 @@ services:
       # Persist generated outputs (bind mount to local directory)
       - ${OUTPUTS_HOST_DIR:-./outputs}:${TRELLIS_OUTPUT_DIR:-/tmp/Trellis-demo}
     environment:
+      # Streamlit configuration
+      - STREAMLIT_SERVER_PORT=${APP_PORT:-8501}
+      - STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
+      - STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
       # Optional: Add any runtime environment variables here
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
     deploy:

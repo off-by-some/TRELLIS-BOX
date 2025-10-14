@@ -11,7 +11,7 @@
 set -e  # Exit on error
 
 # Default build arguments (can be overridden by environment variables)
-CUDA_VERSION=${CUDA_VERSION:-12.1.0}
+CUDA_VERSION=${CUDA_VERSION:-12.4.1}
 PYTHON_VERSION=${PYTHON_VERSION:-3.10}
 APP_PORT=${APP_PORT:-8501}
 

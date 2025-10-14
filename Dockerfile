@@ -7,7 +7,7 @@
 # 
 # Example:
 #   docker build \
-#     --build-arg CUDA_VERSION=12.2.0 \
+#     --build-arg CUDA_VERSION=12.4.1 \
 #     --build-arg PYTHON_VERSION=3.11 \
 #     --build-arg APP_PORT=8080 \
 #     --build-arg CACHE_DIR=/data/.cache \
@@ -17,8 +17,8 @@
 # See docker.env.example for all available configuration options
 # =============================================================================
 # CUDA and System
-ARG CUDA_VERSION=12.1.0
-ARG CUDNN_VERSION=8
+ARG CUDA_VERSION=12.4.1
+ARG CUDNN_VERSION=9
 ARG UBUNTU_VERSION=22.04
 ARG PYTHON_VERSION=3.10
 
@@ -36,6 +36,8 @@ ARG TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 8.9 9.0"
 ARG APP_USER=appuser
 ARG APP_UID=1000
 ARG APP_PORT=8501
+ARG STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ARG STREAMLIT_SERVER_HEADLESS=true
 
 # Cache Directories (inside container)
 ARG CACHE_DIR=/home/appuser/.cache
@@ -144,7 +146,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HUGGINGFACE_HUB_CACHE=${HF_CACHE_DIR} \
     TRANSFORMERS_CACHE=${HF_CACHE_DIR} \
     U2NET_HOME=${REMBG_CACHE_DIR} \
-    TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR}
+    TRELLIS_OUTPUT_DIR=${TRELLIS_OUTPUT_DIR} \
+    STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0} \
+    STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
 
 WORKDIR /app
 
@@ -186,5 +190,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Command to run the Streamlit app
 CMD streamlit run app.py \
     --server.port=${APP_PORT} \
-    --server.address=0.0.0.0 \
-    --server.headless=true
+    --server.address=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0} \
+    --server.headless=${STREAMLIT_SERVER_HEADLESS:-true}
