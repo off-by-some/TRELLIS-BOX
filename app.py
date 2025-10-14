@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 
 import time
 import os
@@ -8,7 +7,6 @@ from webui.loading_screen import show_loading_screen, finalize_loading
 from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
 from webui.ui_components import show_video_preview, show_3d_model_viewer, show_example_gallery
 from webui.image_preview import image_preview
-import base64
 
 # Suppress common warnings for cleaner output
 warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
@@ -36,7 +34,6 @@ import numpy as np
 import imageio
 import uuid
 import gc
-import tempfile
 from dataclasses import dataclass
 from easydict import EasyDict as edict
 from PIL import Image
@@ -93,7 +90,6 @@ class StateManager:
     REFINER = 'refiner'
     UPLOADED_IMAGE = 'uploaded_image'
     PROCESSED_PREVIEW = 'processed_preview'
-    PROCESSED_IMAGE = 'processed_image'
     GENERATED_VIDEO = 'generated_video'
     GENERATED_GLB = 'generated_glb'
     GENERATED_STATE = 'generated_state'
@@ -108,7 +104,6 @@ class StateManager:
             StateManager.REFINER: None,
             StateManager.UPLOADED_IMAGE: None,
             StateManager.PROCESSED_PREVIEW: None,
-            StateManager.PROCESSED_IMAGE: None,
             StateManager.GENERATED_VIDEO: None,
             StateManager.GENERATED_GLB: None,
             StateManager.GENERATED_STATE: None,
@@ -189,7 +184,6 @@ class StateManager:
             StateManager.GENERATED_STATE,
             StateManager.UPLOADED_IMAGE,
             StateManager.PROCESSED_PREVIEW,
-            StateManager.PROCESSED_IMAGE,
         ]
         for key in keys_to_clear:
             st.session_state[key] = None
@@ -301,7 +295,7 @@ class ImageProcessor:
     @staticmethod
     def apply_refinement(image: Image.Image) -> Image.Image:
         """
-        Apply Stable Diffusion XL refinement to improve input image quality.
+        Apply SSD-1B (Segmind Stable Diffusion) refinement to improve input image quality.
         Loads refiner lazily and unloads after use to conserve VRAM.
         
         Args:
@@ -314,7 +308,7 @@ class ImageProcessor:
         
         if refiner is None:
             try:
-                print("Loading Stable Diffusion XL Refiner...")
+                print("Loading SSD-1B Refiner (Segmind Stable Diffusion)...")
                 refiner = ImageRefiner(device="cuda", use_fp16=True)
                 StateManager.set_refiner(refiner)
             except Exception as e:
@@ -346,7 +340,7 @@ class ImageProcessor:
         
         Args:
             image: The input image
-            use_refinement: Whether to apply SD-XL refinement
+            use_refinement: Whether to apply SSD-1B refinement
             
         Returns:
             Tuple of (trial_id, processed_image)
@@ -382,7 +376,7 @@ class ImageProcessor:
         
         Args:
             images: List of input images
-            use_refinement: Whether to apply SD-XL refinement
+            use_refinement: Whether to apply SSD-1B refinement
             
         Returns:
             Tuple of (trial_id, processed_images)
@@ -931,9 +925,9 @@ class SingleImageUI:
                 seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
                 randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
                 use_refinement = st.checkbox(
-                    "Image Refinement (SD-XL)",
+                    "Image Refinement (SSD-1B)",
                     value=False,
-                    help="Enhance input quality with Stable Diffusion XL (adds ~10s" + (" per image)" if is_multi_image else ", uses extra VRAM)"),
+                    help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
                     key=refinement_key
                 )
                 
@@ -1031,7 +1025,6 @@ class SingleImageUI:
                             )
                             
                             state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
-                            st.session_state.processed_image = processed_image
                     
                     # Exit spinner context before setting state and rerunning
                     StateManager.set_generated_glb(None)

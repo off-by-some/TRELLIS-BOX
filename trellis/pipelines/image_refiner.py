@@ -1,8 +1,11 @@
 """
-Image refinement module for TRELLIS-BOX using Stable Diffusion XL Refiner.
+Image refinement module for TRELLIS-BOX using SSD-1B (Segmind Stable Diffusion).
 
 This module provides pre-processing image refinement before 3D generation,
 improving input quality for better 3D reconstruction results.
+
+SSD-1B is a distilled version of SDXL with 50% less memory usage while maintaining
+90-95% of the quality, making it ideal for consumer GPUs.
 """
 
 from typing import Union
@@ -14,10 +17,12 @@ from diffusers import StableDiffusionXLImg2ImgPipeline
 
 class ImageRefiner:
     """
-    Refines input images using Stable Diffusion XL Refiner before 3D generation.
+    Refines input images using SSD-1B (Segmind Stable Diffusion) before 3D generation.
     
     This improves texture quality, reduces artifacts, and enhances details
     in the input image, leading to better 3D reconstruction quality.
+    
+    SSD-1B uses ~4-5GB VRAM (vs SDXL's 8-12GB) while maintaining excellent quality.
     
     Args:
         model_id: Hugging Face model ID for the refiner
@@ -27,14 +32,14 @@ class ImageRefiner:
     
     def __init__(
         self,
-        model_id: str = "stabilityai/stable-diffusion-xl-refiner-1.0",
+        model_id: str = "segmind/SSD-1B",
         device: str = "cuda",
         use_fp16: bool = True,
     ):
         self.device = device
         self.use_fp16 = use_fp16
         
-        # Load refiner pipeline
+        # Load refiner pipeline (SSD-1B uses SDXL architecture)
         dtype = torch.float16 if use_fp16 else torch.float32
         self.pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
             model_id,
