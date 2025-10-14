@@ -42,7 +42,7 @@ ARG STREAMLIT_SERVER_HEADLESS=true
 # Cache Directories (inside container)
 ARG CACHE_DIR=/home/appuser/.cache
 ARG HF_CACHE_DIR=/home/appuser/.cache/huggingface
-ARG REMBG_CACHE_DIR=/home/appuser/.u2net
+ARG REMBG_CACHE_DIR=/app/rembg_cache
 ARG TRELLIS_OUTPUT_DIR=/tmp/Trellis-demo
 
 # =============================================================================
@@ -289,7 +289,7 @@ useradd -m -u ${APP_UID} -s /bin/bash ${APP_USER}
 chown -R ${APP_USER}:${APP_USER} /app
 mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
 chmod -R 777 ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
-chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR}
+chown -R ${APP_USER}:${APP_USER} ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR} ${TRELLIS_OUTPUT_DIR} /app
 
 # Ensure cache directories have proper permissions for downloads
 mkdir -p ${CACHE_DIR} ${HF_CACHE_DIR} ${REMBG_CACHE_DIR}
