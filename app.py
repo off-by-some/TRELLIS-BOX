@@ -707,7 +707,19 @@ def main():
         selected_example = show_example_gallery(example_images, columns=4)
         if selected_example:
             # Load the selected example and clear all state
-            st.session_state.uploaded_image = Image.open(selected_example)
+            example_img = Image.open(selected_example)
+            
+            # Resize large images to prevent OOM errors
+            # TRELLIS works best with images around 512-768px
+            max_size = 768
+            if max(example_img.size) > max_size:
+                # Calculate new size maintaining aspect ratio
+                ratio = max_size / max(example_img.size)
+                new_size = tuple(int(dim * ratio) for dim in example_img.size)
+                example_img = example_img.resize(new_size, Image.Resampling.LANCZOS)
+                print(f"Resized example image from {Image.open(selected_example).size} to {example_img.size}")
+            
+            st.session_state.uploaded_image = example_img
             st.session_state.processed_preview = None
             st.session_state.generated_video = None
             st.session_state.generated_glb = None
