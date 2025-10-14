@@ -1209,6 +1209,12 @@ class MultiImageUI:
                         glb_path, _ = GLBExporter.extract(state, export_params)
                         StateManager.set_generated_glb(glb_path)
                         st.success("✅ Multi-view 3D model complete!")
+                except Exception as e:
+                    st.error(f"❌ Generation failed: {str(e)}")
+                    st.warning("Try reducing image size or restarting the application if memory errors persist.")
+                    import traceback
+                    with st.expander("Error Details"):
+                        st.code(traceback.format_exc())
                 finally:
                     StateManager.set_generating(False)
                 st.rerun()
