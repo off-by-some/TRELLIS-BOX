@@ -52,10 +52,32 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     
     /* Main container with flexbox layout */
     .main .block-container {
-        display: flex !important;
-        flex-direction: column !important;
-        height: 100vh !important;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
         padding: 1rem !important;
+    }
+    
+    /* First container - Terminal (grows to fill space) */
+    .main .block-container > div:nth-child(2) {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        margin-bottom: 1rem;
+        background: #0d1117;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        overflow: hidden;
+    }
+    
+    /* Second container - Progress (stays at bottom) */
+    .main .block-container > div:nth-child(3) {
+        flex-shrink: 0;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     /* Terminal header bar */
@@ -87,7 +109,56 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     .terminal-dot.yellow { background: #ffbd2e; }
     .terminal-dot.green { background: #27c93f; }
     
-    /* Style code blocks inside terminal container */
+    /* Terminal content - the streamlit empty element */
+    .main .block-container > div:nth-child(2) > div > div:last-child {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 1rem;
+        min-height: 0;
+    }
+    
+    /* Style code blocks inside terminal */
+    .main .block-container > div:nth-child(2) pre {
+        flex: 1 1 auto;
+        margin: 0 !important;
+        padding: 1rem !important;
+        background: #0d1117 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        font-family: 'Courier New', 'Consolas', monospace !important;
+        font-size: 0.85rem !important;
+        line-height: 1.5 !important;
+        color: #58a6ff !important;
+        overflow-y: auto !important;
+        min-height: 0 !important;
+    }
+    
+    .main .block-container > div:nth-child(2) code {
+        color: #58a6ff !important;
+        background: transparent !important;
+    }
+    
+    /* Custom scrollbar for terminal */
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-track {
+        background: #161b22;
+    }
+    
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 4px;
+    }
+    
+    .main .block-container > div:nth-child(2) pre::-webkit-scrollbar-thumb:hover {
+        background: #484f58;
+    }
+    
+    /* Style code blocks inside terminal container using :has() selector */
     div[data-testid="stVerticalBlock"]:has(.terminal-header) pre {
         flex: 1 1 auto !important;
         margin: 0 !important;
@@ -108,7 +179,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
         background: transparent !important;
     }
     
-    /* Custom scrollbar for terminal */
+    /* Custom scrollbar for terminal using :has() selector */
     div[data-testid="stVerticalBlock"]:has(.terminal-header) pre::-webkit-scrollbar {
         width: 8px;
     }
