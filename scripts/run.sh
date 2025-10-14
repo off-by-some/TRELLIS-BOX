@@ -242,6 +242,16 @@ start_container() {
     print_status "Press Ctrl+C to stop"
     echo ""
 
+    # Prepare environment variables (don't override CUDA_VISIBLE_DEVICES when using --gpus all)
+    ENV_VARS="-e STREAMLIT_SERVER_PORT=${APP_PORT}"
+    ENV_VARS="$ENV_VARS -e STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS}"
+    ENV_VARS="$ENV_VARS -e STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS}"
+
+    # Only set CUDA_VISIBLE_DEVICES if explicitly set and not using --gpus all
+    if [ -n "${CUDA_VISIBLE_DEVICES}" ] && [ "$GPU_FLAG" != "--gpus all" ]; then
+        ENV_VARS="$ENV_VARS -e CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
+    fi
+
     docker run $GPU_FLAG \
         -it \
         --rm \
@@ -251,10 +261,7 @@ start_container() {
         -v "${HOST_HF_CACHE_DIR}:${HF_CACHE_DIR}" \
         -v "${HOST_REMBG_CACHE_DIR}:${REMBG_CACHE_DIR}" \
         -v "$(pwd)/${OUTPUTS_HOST_DIR}:${TRELLIS_OUTPUT_DIR}" \
-        -e CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES}" \
-        -e STREAMLIT_SERVER_PORT="${APP_PORT}" \
-        -e STREAMLIT_SERVER_ADDRESS="${STREAMLIT_SERVER_ADDRESS}" \
-        -e STREAMLIT_SERVER_HEADLESS="${STREAMLIT_SERVER_HEADLESS}" \
+        $ENV_VARS \
         trellis-box
 
     print_success "TRELLIS container stopped"
@@ -264,8 +271,15 @@ start_container() {
 run_cuda_diagnostics() {
     print_status "Running CUDA diagnostics inside container..."
 
+    # Prepare environment variables (don't override CUDA_VISIBLE_DEVICES when using --gpus all)
+    ENV_VARS=""
+    if [ -n "${CUDA_VISIBLE_DEVICES}" ] && [ "$GPU_FLAG" != "--gpus all" ]; then
+        ENV_VARS="-e CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
+    fi
+
     if docker run --rm $GPU_FLAG \
         --name trellis-diagnostics \
+        $ENV_VARS \
         trellis-box python3 /app/cuda_diag.py; then
         print_success "Diagnostics completed"
     else
