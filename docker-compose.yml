@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  trellis:
+    image: trellis-box
+    container_name: trellis-box
+    ports:
+      - "7860:7860"
+    volumes:
+      # Persist model cache between runs
+      - trellis-cache:/root/.cache
+      # Persist Hugging Face cache
+      - huggingface-cache:/root/.cache/huggingface
+      # Persist rembg model cache
+      - rembg-cache:/root/.u2net
+      # Persist generated outputs
+      - ./outputs:/tmp/Trellis-demo
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+
+volumes:
+  trellis-cache:
+    driver: local
+  huggingface-cache:
+    driver: local
+  rembg-cache:
+    driver: local
+
