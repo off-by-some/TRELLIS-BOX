@@ -847,6 +847,7 @@ def main():
                 )
                 if clear_video == "clear":
                     st.session_state.generated_video = None
+                    reduce_memory_usage()
                     st.rerun()
 
             # 3D model viewer with clear button
@@ -861,6 +862,7 @@ def main():
                 if clear_glb == "clear":
                     st.session_state.generated_glb = None
                     st.session_state.generated_state = None
+                    reduce_memory_usage()
                     st.rerun()
 
                 # Download button
