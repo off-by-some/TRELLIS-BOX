@@ -5,7 +5,7 @@ import os
 import warnings
 from webui.loading_screen import show_loading_screen, finalize_loading
 from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
-from webui.ui_components import show_image_preview, show_video_preview, show_3d_model_viewer
+from webui.ui_components import show_image_preview, show_video_preview, show_3d_model_viewer, show_example_gallery
 import base64
 
 # Suppress common warnings for cleaner output
@@ -516,6 +516,10 @@ def main():
         st.session_state.generated_video = None
     if 'generated_glb' not in st.session_state:
         st.session_state.generated_glb = None
+    if 'uploaded_image' not in st.session_state:
+        st.session_state.uploaded_image = None
+    if 'processed_image' not in st.session_state:
+        st.session_state.processed_image = None
     
     # Create tabs
     tab1, tab2 = st.tabs(["Single Image", "Multi-Image"])
@@ -527,19 +531,44 @@ def main():
 
         with col1:
             st.subheader("Input")
-            uploaded_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"], key="single_image")
-
-            # Show preview of uploaded image and auto-remove background
+            
+            # File uploader without file listing
+            uploaded_file = st.file_uploader(
+                "Upload Image", 
+                type=["png", "jpg", "jpeg"], 
+                key="single_image",
+                label_visibility="visible"
+            )
+            
+            # Handle uploaded image
             if uploaded_file is not None:
-                image = Image.open(uploaded_file)
-                show_image_preview(image, "📷 Original Image", expanded=False)
+                st.session_state.uploaded_image = Image.open(uploaded_file)
+            
+            # Show original image with clear button
+            clear_action = show_image_preview(
+                st.session_state.uploaded_image, 
+                "📷 Original Image",
+                show_clear=True,
+                clear_key="single_original"
+            )
+            if clear_action == "clear":
+                st.session_state.uploaded_image = None
+                st.session_state.processed_preview = None
+                st.rerun()
 
-                # Auto-remove background and show processed preview
+            # Auto-remove background and show processed preview
+            if st.session_state.uploaded_image is not None:
                 if 'pipeline' in st.session_state and st.session_state.pipeline is not None:
                     pipeline = st.session_state.pipeline
                     with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                        processed_image = pipeline.preprocess_image(image)
-                    show_image_preview(processed_image, "🎨 Background Removed (Auto)", expanded=True)
+                        processed_image = pipeline.preprocess_image(st.session_state.uploaded_image)
+                    
+                    clear_action = show_image_preview(
+                        processed_image, 
+                        "🎨 Background Removed (Auto)",
+                        show_clear=False,
+                        clear_key="single_processed"
+                    )
                     st.session_state.processed_preview = processed_image
                 else:
                     st.info("Background removal preview will be shown after pipeline loads")
@@ -570,7 +599,7 @@ def main():
                     slat_sampling_steps_single = st.slider("Sampling Steps", 1, 50, 12, 1, key="slat_steps_single")
 
             if st.button("Generate 3D Model", type="primary", key="generate_single"):
-                if uploaded_file is not None:
+                if st.session_state.uploaded_image is not None:
                     with st.spinner("Generating 3D model..."):
                         # Use the auto-processed image from preview, or process it if preview failed
                         if st.session_state.get('processed_preview') is not None:
@@ -580,13 +609,9 @@ def main():
                             processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
                         else:
                             # Fallback: process the image normally
-                            image = Image.open(uploaded_file)
-                            # Apply refinement if requested
-                            if use_refinement_single:
-                                st.info("Applying image refinement...")
-                                image = apply_image_refinement(image)
-                        # Preprocess image
-                        trial_id, processed_image = preprocess_image(image, use_refinement_single)
+                            image = st.session_state.uploaded_image
+                            # Preprocess image
+                            trial_id, processed_image = preprocess_image(image, use_refinement_single)
 
                         # Generate 3D model
                         state, video_path = image_to_3d(
@@ -619,16 +644,29 @@ def main():
         with col2:
             st.subheader("Output")
 
-            # Processed image is already shown in input section
+            # Video preview with clear button
+            clear_video = show_video_preview(
+                st.session_state.generated_video,
+                show_clear=True,
+                clear_key="single_video"
+            )
+            if clear_video == "clear":
+                st.session_state.generated_video = None
+                st.rerun()
 
-            if st.session_state.generated_video:
-                show_video_preview(st.session_state.generated_video)
-
+            # 3D model viewer with clear button
             if st.session_state.generated_glb:
                 st.success("✅ 3D Model Ready!")
                 
-                # Display 3D model viewer
-                show_3d_model_viewer(st.session_state.generated_glb)
+                clear_glb = show_3d_model_viewer(
+                    st.session_state.generated_glb,
+                    show_clear=True,
+                    clear_key="single_glb"
+                )
+                if clear_glb == "clear":
+                    st.session_state.generated_glb = None
+                    st.session_state.generated_state = None
+                    st.rerun()
 
                 # Download button
                 with open(st.session_state.generated_glb, "rb") as file:
@@ -639,19 +677,20 @@ def main():
                         mime="model/gltf-binary",
                         type="primary"
                     )
+            else:
+                # Show placeholder when no GLB
+                show_3d_model_viewer(None)
 
         # Examples
         st.subheader("Examples")
-        example_cols = st.columns(4)
-        example_images = [f'assets/example_image/{img}' for img in os.listdir("assets/example_image")[:8]]
-
-        for i, example_path in enumerate(example_images):
-            with example_cols[i % 4]:
-                if st.button(f"Example {i+1}", key=f"example_{i}"):
-                    # Load and display example
-                    example_image = Image.open(example_path)
-                    st.session_state.current_image = example_image
-                    st.rerun()
+        example_images = sorted([f'assets/example_image/{img}' for img in os.listdir("assets/example_image") if img.endswith(('.png', '.jpg', '.jpeg'))])
+        
+        selected_example = show_example_gallery(example_images, columns=4)
+        if selected_example:
+            # Load the selected example
+            st.session_state.uploaded_image = Image.open(selected_example)
+            st.session_state.processed_preview = None
+            st.rerun()
         
     with tab2:
         st.header("Multi-Image Generation")
@@ -757,14 +796,29 @@ def main():
         with col2:
             st.subheader("Output")
 
-            if st.session_state.generated_video:
-                show_video_preview(st.session_state.generated_video)
+            # Video preview with clear button
+            clear_video = show_video_preview(
+                st.session_state.generated_video,
+                show_clear=True,
+                clear_key="multi_video"
+            )
+            if clear_video == "clear":
+                st.session_state.generated_video = None
+                st.rerun()
 
+            # 3D model viewer with clear button
             if st.session_state.generated_glb:
                 st.success("✅ Multi-View 3D Model Ready!")
                 
-                # Display 3D model viewer
-                show_3d_model_viewer(st.session_state.generated_glb)
+                clear_glb = show_3d_model_viewer(
+                    st.session_state.generated_glb,
+                    show_clear=True,
+                    clear_key="multi_glb"
+                )
+                if clear_glb == "clear":
+                    st.session_state.generated_glb = None
+                    st.session_state.generated_state = None
+                    st.rerun()
 
                 # Download button
                 with open(st.session_state.generated_glb, "rb") as file:
@@ -776,6 +830,9 @@ def main():
                         type="primary",
                         key="download_multi"
                     )
+            else:
+                # Show placeholder when no GLB
+                show_3d_model_viewer(None)
 
     
 
