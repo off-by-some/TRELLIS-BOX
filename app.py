@@ -1035,6 +1035,8 @@ class SingleImageUI:
                         # Generate 3D model
                         state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
                         
+                        # Clear any existing GLB before setting new video
+                        StateManager.set_generated_glb(None)
                         StateManager.set_generated_video(video_path)
                         StateManager.set_generated_state(state)
                         st.session_state.processed_image = processed_image
@@ -1221,6 +1223,8 @@ class MultiImageUI:
                             params
                         )
                         
+                        # Clear any existing GLB before setting new video
+                        StateManager.set_generated_glb(None)
                         StateManager.set_generated_video(video_path)
                         StateManager.set_generated_state(state)
                         
