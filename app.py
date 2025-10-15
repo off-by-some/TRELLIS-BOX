@@ -1185,8 +1185,29 @@ class SingleImageUI:
                     StateManager.set_generated_video(video_path)
                     StateManager.set_generated_state(state)
 
+                    # Immediately extract GLB after video generation
+                    if state is not None:
+                        # Determine export parameters based on current tab
+                        if is_multi_image:
+                            mesh_simplify = st.session_state.get('simplify_multi', 0.95)
+                            texture_size = st.session_state.get('texture_multi', 1024)
+                        else:
+                            mesh_simplify = st.session_state.get('simplify_single', 0.95)
+                            texture_size = st.session_state.get('texture_single', 1024)
+
+                        export_params = ExportParams(
+                            mesh_simplify=mesh_simplify,
+                            texture_size=texture_size
+                        )
+
+                        try:
+                            glb_path, _ = GLBExporter.extract(state, export_params)
+                            StateManager.set_generated_glb(glb_path)
+                            st.success("✅ 3D model complete!")
+                        except Exception as e:
+                            st.warning(f"GLB extraction failed: {e}")
+
                     StateManager.set_generating(False)
-                    # No st.rerun() needed - Streamlit will automatically update the UI when session state changes
                 except Exception as e:
                     StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
@@ -1261,26 +1282,7 @@ class SingleImageUI:
             # Show placeholder when no GLB
             show_3d_model_viewer(None)
         
-        # Auto-extract GLB after video is shown (runs on next render after video appears)
-        if generated_video and not generated_glb and generated_state:
-            with st.spinner("Extracting GLB..."):
-                # Determine which tab we're in based on the video_key
-                if video_key == "single_video":
-                    mesh_simplify = st.session_state.get('simplify_single', 0.95)
-                    texture_size = st.session_state.get('texture_single', 1024)
-                else:  # multi_video
-                    mesh_simplify = st.session_state.get('simplify_multi', 0.95)
-                    texture_size = st.session_state.get('texture_multi', 1024)
-                
-                export_params = ExportParams(
-                    mesh_simplify=mesh_simplify,
-                    texture_size=texture_size
-                )
-                
-                glb_path, _ = GLBExporter.extract(generated_state, export_params)
-                StateManager.set_generated_glb(glb_path)
-                st.success("✅ 3D model complete!")
-                # No st.rerun() needed - Streamlit will automatically update the UI when session state changes
+        # GLB extraction now happens immediately after generation
         
     
     @staticmethod
