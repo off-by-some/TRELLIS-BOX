@@ -994,7 +994,7 @@ class SingleImageUI:
             st.markdown("**Quality Preset**")
             quality_presets = {
                 "Fast (Low Quality)": {
-                    "resize": 384,
+                    "resize": 392,  # 28*14 = 392 (multiple of 14)
                     "ss_strength": 5.0,
                     "ss_steps": 8,
                     "slat_strength": 2.0,
@@ -1002,7 +1002,7 @@ class SingleImageUI:
                     "refinement": False
                 },
                 "Balanced": {
-                    "resize": 518,
+                    "resize": 518,  # 37*14 = 518 (multiple of 14)
                     "ss_strength": 7.5,
                     "ss_steps": 12,
                     "slat_strength": 3.0,
@@ -1010,7 +1010,7 @@ class SingleImageUI:
                     "refinement": False
                 },
                 "High Quality (Recommended)": {
-                    "resize": 768,
+                    "resize": 770,  # 55*14 = 770 (multiple of 14)
                     "ss_strength": 10.0,
                     "ss_steps": 20,
                     "slat_strength": 4.0,
@@ -1018,7 +1018,7 @@ class SingleImageUI:
                     "refinement": True
                 },
                 "Maximum Quality (Slow)": {
-                    "resize": 1024,
+                    "resize": 1022,  # 73*14 = 1022 (multiple of 14)
                     "ss_strength": 12.0,
                     "ss_steps": 30,
                     "slat_strength": 5.0,
@@ -1075,29 +1075,31 @@ class SingleImageUI:
 
             # Resize dimensions for conditioning model (set by preset)
             with st.expander("Advanced: Override Preset Settings", expanded=False):
-                st.markdown("**Resize Dimensions**")
+                st.markdown("**Resize Dimensions** (must be multiples of 14)")
+                
+                # Valid resize options (multiples of 14)
+                valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
+                
                 col1, col2 = st.columns(2)
                 with col1:
-                    resize_width = st.number_input(
+                    resize_width = st.selectbox(
                         "Width",
-                        min_value=256,
-                        max_value=1024,
-                        value=preset_settings["resize"],
-                        step=64,
-                        help="Width to resize images to for conditioning model",
-                        key=f"resize_width_{trial_id}"
+                        options=valid_sizes,
+                        index=valid_sizes.index(preset_settings["resize"]) if preset_settings["resize"] in valid_sizes else 0,
+                        key=f"resize_width_{trial_id}",
+                        help="Width to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
                     )
                     # Store in session state for use in generation
                     st.session_state["resize_width"] = resize_width
                 with col2:
-                    resize_height = st.number_input(
+                    resize_height = st.selectbox(
                         "Height",
-                        min_value=256,
-                        max_value=1024,
-                        value=preset_settings["resize"],
-                        step=64,
-                        help="Height to resize images to for conditioning model",
-                        key=f"resize_height_{trial_id}"
+                        options=valid_sizes,
+                        index=valid_sizes.index(preset_settings["resize"]) if preset_settings["resize"] in valid_sizes else 0,
+                        key=f"resize_height_{trial_id}",
+                        help="Height to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
                     )
                     # Store in session state for use in generation
                     st.session_state["resize_height"] = resize_height
