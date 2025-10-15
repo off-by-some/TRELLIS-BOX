@@ -572,12 +572,16 @@ class ModelGenerator:
                 # Critical memory optimization before heavy computation
                 MemoryManager.reduce_memory()
                 
+                # Get resize dimensions, ensuring they're valid
+                resize_width = st.session_state.get("resize_width", 518)
+                resize_height = st.session_state.get("resize_height", 518)
+                
                 outputs = pipeline.run(
                     image,
                     seed=seed,
                     formats=["gaussian", "mesh"],
                     preprocess_image=False,
-                    target_size=(st.session_state.get("resize_width", 518), st.session_state.get("resize_height", 518)),
+                    target_size=(int(resize_width), int(resize_height)),
                     sparse_structure_sampler_params={
                         "steps": params.ss_sampling_steps,
                         "cfg_strength": params.ss_guidance_strength,
@@ -1123,11 +1127,20 @@ class SingleImageUI:
                             # Get analysis results and UI values from session state
                             cond = st.session_state.get('generation_cond')
                             contradiction = st.session_state.get('generation_contradiction', 0.0)
+                            auto_adjust_enabled = st.session_state.get("auto_adjust_multi", False)
 
-                            # Get all UI values from session state (stored by Streamlit widgets)
-                            # Use the multi-view keys since this is multi-view generation
-                            ss_guidance_strength = st.session_state.get("ss_strength_multi", 7.5)
-                            slat_guidance_strength = st.session_state.get("slat_strength_multi", 3.0)
+                            # Determine guidance values based on auto-adjust setting
+                            if auto_adjust_enabled and cond and cond.get('multi_view', False):
+                                # Use optimal values calculated from contradiction
+                                guidance_multiplier = 1.0 + (contradiction * 0.5)
+                                ss_guidance_strength = min(7.5 * guidance_multiplier, 15.0)
+                                slat_guidance_strength = min(3.0 * guidance_multiplier, 10.0)
+                            else:
+                                # Use slider values from session state
+                                ss_guidance_strength = st.session_state.get("ss_strength_multi", 7.5)
+                                slat_guidance_strength = st.session_state.get("slat_strength_multi", 3.0)
+
+                            # Get sampling steps (always from sliders)
                             ss_sampling_steps = st.session_state.get("ss_steps_multi", 12)
                             slat_sampling_steps = st.session_state.get("slat_steps_multi", 12)
 
@@ -1140,7 +1153,6 @@ class SingleImageUI:
                                 slat_sampling_steps=slat_sampling_steps
                             )
 
-                            # For multi-view with auto-adjust, params already have adjusted values
                             multiview_params = params
 
                             state, video_path = ModelGenerator.generate_from_multiple_images(
@@ -1162,8 +1174,11 @@ class SingleImageUI:
                                     use_refinement
                                 )
 
-                            # Get all UI values from session state (stored by Streamlit widgets)
-                            # Use the single-view keys since this is single-view generation
+                            # Get auto-adjust setting for single-view
+                            auto_adjust_enabled = st.session_state.get("auto_adjust_single", False)
+
+                            # For single-view, auto-adjust doesn't change guidance (no contradiction to measure)
+                            # Always use slider values
                             ss_guidance_strength = st.session_state.get("ss_strength_single", 7.5)
                             slat_guidance_strength = st.session_state.get("slat_strength_single", 3.0)
                             ss_sampling_steps = st.session_state.get("ss_steps_single", 12)
