@@ -68,6 +68,8 @@ class ExportParams:
     """Parameters for GLB export."""
     mesh_simplify: float
     texture_size: int
+    fill_holes_resolution: int = 1024
+    fill_holes_num_views: int = 1000
 
 
 @dataclass
@@ -813,6 +815,8 @@ class GLBExporter:
             gs, mesh,
             simplify=params.mesh_simplify,
             texture_size=params.texture_size,
+            fill_holes_resolution=params.fill_holes_resolution,
+            fill_holes_num_views=params.fill_holes_num_views,
             verbose=False
         )
         
@@ -1081,8 +1085,69 @@ class SingleImageUI:
         # GLB Export Settings (always shown when input is available)
         if has_any_input:
             with st.expander("GLB Export Settings", expanded=False):
-                mesh_simplify = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key=simplify_key)
-                texture_size = st.slider("Texture Size", 512, 2048, 1024, 512, key=texture_key)
+                # Quality Presets
+                st.markdown("**Quality Presets**")
+
+                mesh_quality_options = {
+                    "Low (Fast)": {"simplify": 0.85, "texture": 512, "fill_res": 512, "fill_views": 500},
+                    "Medium (Balanced)": {"simplify": 0.90, "texture": 1024, "fill_res": 1024, "fill_views": 1000},
+                    "High (Detailed)": {"simplify": 0.95, "texture": 1024, "fill_res": 1024, "fill_views": 1000},
+                    "Premium (Max Quality)": {"simplify": 0.98, "texture": 2048, "fill_res": 2048, "fill_views": 2000}
+                }
+
+                mesh_quality = st.selectbox(
+                    "Mesh Quality",
+                    options=list(mesh_quality_options.keys()),
+                    index=2,  # Default to "High (Detailed)"
+                    key=f"mesh_quality_{trial_id}",
+                    help="Controls mesh detail and processing quality. Higher quality = more detailed mesh but slower processing."
+                )
+
+                # Get values from selected preset
+                quality_settings = mesh_quality_options[mesh_quality]
+                mesh_simplify = quality_settings["simplify"]
+                texture_size = quality_settings["texture"]
+                fill_holes_resolution = quality_settings["fill_res"]
+                fill_holes_num_views = quality_settings["fill_views"]
+
+                # Advanced Settings
+                with st.expander("Advanced Settings", expanded=False):
+                    st.markdown("**Mesh Settings**")
+                    mesh_simplify = st.slider(
+                        "Mesh Simplify Ratio",
+                        0.8, 0.99, mesh_simplify, 0.01,
+                        key=simplify_key,
+                        help="Ratio of faces to keep (higher = more detailed mesh)"
+                    )
+
+                    st.markdown("**Texture Settings**")
+                    texture_size = st.slider(
+                        "Texture Size",
+                        256, 4096, texture_size, 256,
+                        key=texture_key,
+                        help="Resolution of the texture (higher = sharper textures but larger file)"
+                    )
+
+                    st.markdown("**Hole Filling Settings**")
+                    fill_holes_resolution = st.slider(
+                        "Hole Fill Resolution",
+                        256, 4096, fill_holes_resolution, 256,
+                        key=f"fill_res_{trial_id}",
+                        help="Resolution used for hole filling algorithm"
+                    )
+
+                    fill_holes_num_views = st.slider(
+                        "Hole Fill Views",
+                        100, 4000, fill_holes_num_views, 100,
+                        key=f"fill_views_{trial_id}",
+                        help="Number of views used for hole filling (higher = better hole filling but slower)"
+                    )
+
+                # Store current settings in session state for GLB extraction
+                st.session_state['mesh_simplify'] = mesh_simplify
+                st.session_state['texture_size'] = texture_size
+                st.session_state['fill_holes_resolution'] = fill_holes_resolution
+                st.session_state['fill_holes_num_views'] = fill_holes_num_views
             
             # Generate/Regenerate button
             is_generating = StateManager.is_generating()
@@ -1199,27 +1264,36 @@ class SingleImageUI:
                     StateManager.set_generated_video(video_path)
                     StateManager.set_generated_state(state)
 
-                    # Immediately extract GLB after video generation
+                    # Extract GLB after video generation with proper synchronization
                     if state is not None:
-                        # Determine export parameters based on current tab
-                        if is_multi_image:
-                            mesh_simplify = st.session_state.get('simplify_multi', 0.95)
-                            texture_size = st.session_state.get('texture_multi', 1024)
-                        else:
-                            mesh_simplify = st.session_state.get('simplify_single', 0.95)
-                            texture_size = st.session_state.get('texture_single', 1024)
-
+                        # Get the current values from session state
                         export_params = ExportParams(
-                            mesh_simplify=mesh_simplify,
-                            texture_size=texture_size
+                            mesh_simplify=st.session_state.get('mesh_simplify', 0.95),
+                            texture_size=st.session_state.get('texture_size', 1024),
+                            fill_holes_resolution=st.session_state.get('fill_holes_resolution', 1024),
+                            fill_holes_num_views=st.session_state.get('fill_holes_num_views', 1000)
                         )
 
                         try:
-                            glb_path, _ = GLBExporter.extract(state, export_params)
+                            # Show progress for GLB extraction
+                            with st.spinner("Extracting 3D model..."):
+                                glb_path, _ = GLBExporter.extract(state, export_params)
+
+                            # Ensure state is properly set before UI update
                             StateManager.set_generated_glb(glb_path)
+
+                            # Force a small delay to ensure state propagation
+                            time.sleep(0.1)
+
                             st.success("✅ 3D model complete!")
+
+                            # Trigger UI refresh to ensure 3D model appears
+                            st.rerun()
+
                         except Exception as e:
                             st.warning(f"GLB extraction failed: {e}")
+                            # Ensure GLB state is cleared on failure
+                            StateManager.set_generated_glb(None)
 
                     StateManager.set_generating(False)
                 except Exception as e:
@@ -1263,12 +1337,13 @@ class SingleImageUI:
                 MemoryManager.cleanup_session_state(clear_all=False)
                 st.rerun()
         
-        # 3D model viewer (shown after video or GLB is available)
+        # 3D model viewer (shown after video and GLB are both available)
         generated_video = StateManager.get_generated_video()
         generated_glb = StateManager.get_generated_glb()
         generated_state = StateManager.get_generated_state()
-        
-        if generated_glb:
+
+        # Only show 3D model viewer if we have both video and GLB (ensures proper state synchronization)
+        if generated_glb and generated_video and generated_state:
             st.success("✅ 3D Model Ready!")
             
             clear_glb = show_3d_model_viewer(

@@ -417,6 +417,8 @@ def to_glb(
     fill_holes: bool = True,
     fill_holes_max_size: float = 0.04,
     texture_size: int = 1024,
+    fill_holes_resolution: int = 1024,
+    fill_holes_num_views: int = 1000,
     debug: bool = False,
     verbose: bool = True,
 ) -> trimesh.Trimesh:
@@ -430,6 +432,8 @@ def to_glb(
         fill_holes (bool): Whether to fill holes in the mesh.
         fill_holes_max_size (float): Maximum area of a hole to fill.
         texture_size (int): Size of the texture.
+        fill_holes_resolution (int): Resolution of the rasterization for hole filling.
+        fill_holes_num_views (int): Number of views to rasterize the mesh for hole filling.
         debug (bool): Whether to print debug information.
         verbose (bool): Whether to print progress.
     """
@@ -444,8 +448,8 @@ def to_glb(
         fill_holes=fill_holes,
         fill_holes_max_hole_size=fill_holes_max_size,
         fill_holes_max_hole_nbe=int(250 * np.sqrt(1-simplify)),
-        fill_holes_resolution=1024,
-        fill_holes_num_views=1000,
+        fill_holes_resolution=fill_holes_resolution,
+        fill_holes_num_views=fill_holes_num_views,
         debug=debug,
         verbose=verbose,
     )
