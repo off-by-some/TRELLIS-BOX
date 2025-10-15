@@ -970,95 +970,95 @@ class SingleImageUI:
         else:
             has_input = uploaded_data is not None
         
-        # Only show generation settings if we have input
+        # Always show generation settings if we have input (don't hide after generation)
         if has_input:
-            # Generation Settings
-            with st.expander("Generation Settings", expanded=True):
-                seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
-                randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
-                use_refinement = st.checkbox(
-                    "Image Refinement (SSD-1B)",
-                    value=False,
-                    help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
-                    key=refinement_key
+            # Generation Settings - always visible so users can regenerate with new parameters
+            st.subheader("⚙️ Generation Settings")
+            seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
+            randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
+            use_refinement = st.checkbox(
+                "Image Refinement (SSD-1B)",
+                value=False,
+                help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
+                key=refinement_key
+            )
+
+            # Auto-adjust guidance based on input consistency
+            auto_adjust_guidance = st.checkbox(
+                "Auto-adjust guidance based on input consistency",
+                value=True,
+                help="Automatically optimize guidance strength based on how consistent your input images are. Recommended for best results.",
+                key=f"auto_adjust_{trial_id}"
+            )
+
+            # Manual guidance sliders (only shown when auto-adjust is disabled)
+            if not auto_adjust_guidance:
+                ss_strength = st.slider(
+                    "Sparse Structure Guidance", 0.0, 15.0, 7.5, 0.1,
+                    help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
+                    key=ss_strength_key
+                )
+                slat_strength = st.slider(
+                    "SLAT Guidance", 0.0, 10.0, 3.0, 0.1,
+                    help="Higher values = stronger adherence to structured latent features",
+                    key=slat_strength_key
+                )
+            else:
+                # Show current auto values (will be calculated later)
+                st.info("Guidance strength will be automatically optimized based on your input consistency")
+
+            # Resize dimensions for conditioning model
+            st.markdown("**Resize Dimensions**")
+            col1, col2 = st.columns(2)
+            with col1:
+                resize_width = st.number_input(
+                    "Width",
+                    min_value=256,
+                    max_value=1024,
+                    value=518,
+                    step=64,
+                    help="Width to resize images to for conditioning model",
+                    key=f"resize_width_{trial_id}"
+                )
+                # Store in session state for use in generation
+                st.session_state["resize_width"] = resize_width
+            with col2:
+                resize_height = st.number_input(
+                    "Height",
+                    min_value=256,
+                    max_value=1024,
+                    value=518,
+                    step=64,
+                    help="Height to resize images to for conditioning model",
+                    key=f"resize_height_{trial_id}"
+                )
+                # Store in session state for use in generation
+                st.session_state["resize_height"] = resize_height
+
+            # Batch size for multi-image only
+            if is_multi_image and batch_size_key:
+                batch_size = st.slider(
+                    "Batch Size", 1, 4, 2, 1,
+                    help="Number of images processed at once (lower = less memory)",
+                    key=batch_size_key
                 )
 
-                # Auto-adjust guidance based on input consistency
-                auto_adjust_guidance = st.checkbox(
-                    "Auto-adjust guidance based on input consistency",
-                    value=True,
-                    help="Automatically optimize guidance strength based on how consistent your input images are. Recommended for best results.",
-                    key=f"auto_adjust_{trial_id}"
-                )
-                # Note: Streamlit automatically manages widget values in session state
+            st.markdown("**Stage 1: Sparse Structure Generation**")
+            ss_col1, ss_col2 = st.columns(2)
+            with ss_col1:
+                ss_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key=ss_strength_key)
+            with ss_col2:
+                ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
 
-                # Manual guidance sliders (only shown when auto-adjust is disabled)
-                if not auto_adjust_guidance:
-                    ss_strength = st.slider(
-                        "Sparse Structure Guidance", 0.0, 15.0, 7.5, 0.1,
-                        help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
-                        key=ss_strength_key
-                    )
-                    slat_strength = st.slider(
-                        "SLAT Guidance", 0.0, 10.0, 3.0, 0.1,
-                        help="Higher values = stronger adherence to structured latent features",
-                        key=slat_strength_key
-                    )
-                else:
-                    # Show current auto values (will be calculated later)
-                    st.info("Guidance strength will be automatically optimized based on your input consistency")
+            st.markdown("**Stage 2: Structured Latent Generation**")
+            slat_col1, slat_col2 = st.columns(2)
+            with slat_col1:
+                slat_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key=slat_strength_key)
+            with slat_col2:
+                slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
 
-                # Resize dimensions for conditioning model
-                st.markdown("**Resize Dimensions**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    resize_width = st.number_input(
-                        "Width",
-                        min_value=256,
-                        max_value=1024,
-                        value=518,
-                        step=64,
-                        help="Width to resize images to for conditioning model",
-                        key=f"resize_width_{trial_id}"
-                    )
-                    # Store in session state for use in generation
-                    st.session_state["resize_width"] = resize_width
-                with col2:
-                    resize_height = st.number_input(
-                        "Height",
-                        min_value=256,
-                        max_value=1024,
-                        value=518,
-                        step=64,
-                        help="Height to resize images to for conditioning model",
-                        key=f"resize_height_{trial_id}"
-                    )
-                    # Store in session state for use in generation
-                    st.session_state["resize_height"] = resize_height
-
-                # Batch size for multi-image only
-                if is_multi_image and batch_size_key:
-                    batch_size = st.slider(
-                        "Batch Size", 1, 4, 2, 1,
-                        help="Number of images processed at once (lower = less memory)",
-                        key=batch_size_key
-                    )
-                
-                st.markdown("**Stage 1: Sparse Structure Generation**")
-                ss_col1, ss_col2 = st.columns(2)
-                with ss_col1:
-                    ss_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key=ss_strength_key)
-                with ss_col2:
-                    ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
-                
-                st.markdown("**Stage 2: Structured Latent Generation**")
-                slat_col1, slat_col2 = st.columns(2)
-                with slat_col1:
-                    slat_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key=slat_strength_key)
-                with slat_col2:
-                    slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
-            
-            # GLB Export Settings
+        # GLB Export Settings (always shown when input is available)
+        if has_input:
             with st.expander("GLB Export Settings", expanded=False):
                 mesh_simplify = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key=simplify_key)
                 texture_size = st.slider("Texture Size", 512, 2048, 1024, 512, key=texture_key)
@@ -1180,7 +1180,8 @@ class SingleImageUI:
                     with st.expander("Error Details"):
                         st.code(traceback.format_exc())
         
-        # Output preview (always shown)
+        # Output preview (always shown below generation settings)
+        st.markdown("---")  # Visual separator
         SingleImageUI._render_output_preview(video_key, glb_key, download_key)
     
     @staticmethod
