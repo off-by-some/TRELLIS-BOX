@@ -963,15 +963,19 @@ class SingleImageUI:
             import uuid
             trial_id = str(uuid.uuid4())
 
-        # Check if we have valid input
-        has_input = False
+        # Check if we have any uploaded data (show options even with 1 image)
+        has_any_input = (uploaded_data is not None and
+                        (not isinstance(uploaded_data, list) or len(uploaded_data) > 0))
+
+        # Check if we have valid input for generation
+        has_valid_input = False
         if is_multi_image:
-            has_input = uploaded_data and len(uploaded_data) >= 2
+            has_valid_input = uploaded_data and len(uploaded_data) >= 2
         else:
-            has_input = uploaded_data is not None
-        
-        # Always show generation settings if we have input (don't hide after generation)
-        if has_input:
+            has_valid_input = uploaded_data is not None
+
+        # ALWAYS show generation settings if we have ANY uploaded data
+        if has_any_input:
             # Generation Settings - always visible so users can regenerate with new parameters
             st.subheader("⚙️ Generation Settings")
             seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
