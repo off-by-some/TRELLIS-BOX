@@ -304,7 +304,7 @@ class ImageProcessor:
 
         if refiner is None:
             print("Loading SSD-1B Refiner (Segmind Stable Diffusion)...")
-            refiner = ImageRefiner(device="cuda", use_fp16=True)
+            refiner = ImageRefiner(device="cpu", use_fp16=False)
             StateManager.set_refiner(refiner)
 
         # Apply refinement
