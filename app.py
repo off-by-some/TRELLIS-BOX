@@ -971,8 +971,7 @@ class SingleImageUI:
                     help="Automatically optimize guidance strength based on how consistent your input images are. Recommended for best results.",
                     key=f"auto_adjust_{trial_id}"
                 )
-                # Store in session state for use in generation
-                st.session_state[f"auto_adjust_{trial_id}"] = auto_adjust_guidance
+                # Note: Streamlit automatically manages widget values in session state
 
                 # Manual guidance sliders (only shown when auto-adjust is disabled)
                 if not auto_adjust_guidance:
