@@ -339,77 +339,81 @@ class ImageProcessor:
     def preprocess_single_image(image: Image.Image, use_refinement: bool = False) -> Tuple[str, Image.Image]:
         """
         Preprocess a single input image with memory-efficient operations.
-        
+        Background removal happens first, then refinement if requested.
+
         Args:
             image: The input image
-            use_refinement: Whether to apply SSD-1B refinement
-            
+            use_refinement: Whether to apply SSD-1B refinement after background removal
+
         Returns:
             Tuple of (trial_id, processed_image)
         """
         trial_id = str(uuid.uuid4())
-        
-        # Apply refinement if requested
+
+        # Memory-efficient preprocessing with no gradients (background removal first)
+        pipeline = StateManager.get_pipeline()
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                processed_image = pipeline.preprocess_image(image)
+
+        # Apply refinement after background removal if requested
         if use_refinement:
-            print("Applying image refinement...")
-            image = ImageProcessor.apply_refinement(image)
+            print("Applying image refinement after background removal...")
+            processed_image = ImageProcessor.apply_refinement(processed_image)
             # Clean up refiner VRAM before TRELLIS processing
             refiner = StateManager.get_refiner()
             if refiner is not None:
                 refiner.unload()
             torch.cuda.empty_cache()
-        
-        # Memory-efficient preprocessing with no gradients
-        pipeline = StateManager.get_pipeline()
-        with torch.no_grad():
-            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                processed_image = pipeline.preprocess_image(image)
-        
+
         # High-quality image saving - no compression artifacts
         processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
-        
+
         return trial_id, processed_image
     
     @staticmethod
     def preprocess_multiple_images(images: List[Image.Image], use_refinement: bool = False) -> Tuple[str, List[Image.Image]]:
         """
         Preprocess multiple input images for multi-view 3D reconstruction.
+        Background removal happens first, then refinement if requested.
         Memory optimization: Process and save images one by one to reduce peak memory usage.
-        
+
         Args:
             images: List of input images
-            use_refinement: Whether to apply SSD-1B refinement
-            
+            use_refinement: Whether to apply SSD-1B refinement after background removal
+
         Returns:
             Tuple of (trial_id, processed_images)
         """
         trial_id = str(uuid.uuid4())
         processed_images = []
-        
+
         # Process images one by one to minimize memory usage
         pipeline = StateManager.get_pipeline()
         for i, img in enumerate(images):
-            # Apply refinement if requested
-            if use_refinement:
-                print(f"Refining image {i+1}/{len(images)}...")
-                img = ImageProcessor.apply_refinement(img)
-            
+            # Background removal first
             processed_img = pipeline.preprocess_image(img)
+
+            # Apply refinement after background removal if requested
+            if use_refinement:
+                print(f"Refining image {i+1}/{len(images)} after background removal...")
+                processed_img = ImageProcessor.apply_refinement(processed_img)
+
             # High-quality image saving for multi-view - no compression artifacts
             processed_img.save(f"{TMP_DIR}/{trial_id}_{i}.png", quality=100, subsampling=0)
             processed_images.append(processed_img)
-            
+
             # Force cleanup of intermediate objects
             del img
             torch.cuda.empty_cache()
-        
+
         # Clean up refiner after processing all images
         if use_refinement:
             refiner = StateManager.get_refiner()
             if refiner is not None:
                 refiner.unload()
                 torch.cuda.empty_cache()
-        
+
         return trial_id, processed_images
 
 
@@ -893,8 +897,16 @@ class SingleImageUI:
         if uploaded_image is not None:
             st.markdown("**Uploaded Image:**")
             st.image(uploaded_image, use_container_width=True)
-            
-            # Auto-process and show background-removed preview
+
+            # Image refinement checkbox
+            use_refinement = st.checkbox(
+                "Apply Image Refinement (SSD-1B)",
+                value=False,  # Default to False to avoid confusion
+                help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s processing time.",
+                key="refinement_single_input"
+            )
+
+            # Auto-process and show final processed preview
             pipeline = StateManager.get_pipeline()
             if pipeline is not None:
                 # Use current resize dimensions if set, otherwise use default
@@ -902,9 +914,11 @@ class SingleImageUI:
                 current_height = st.session_state.get("resize_height", 518)
                 target_size = (current_width, current_height)
 
-                # Check if we need to regenerate preview due to size change
+                # Check if we need to regenerate preview due to size change or refinement setting change
                 current_preview_size = st.session_state.get("processed_preview_size")
+                current_refinement_setting = st.session_state.get("current_refinement_setting", False)
                 needs_regeneration = (current_preview_size != target_size or
+                                    current_refinement_setting != use_refinement or
                                     'processed_preview' not in st.session_state or
                                     st.session_state.processed_preview is None)
 
@@ -912,19 +926,34 @@ class SingleImageUI:
                     with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                         processed_image = pipeline.preprocess_image(uploaded_image, target_size)
 
-                    # Store preview and track the resize dimensions used
+                    # Apply refinement if enabled
+                    if use_refinement:
+                        processed_image = ImageProcessor.apply_refinement(processed_image)
+                        # Clean up refiner VRAM
+                        refiner = StateManager.get_refiner()
+                        if refiner is not None:
+                            refiner.unload()
+                        torch.cuda.empty_cache()
+
+                    # Store preview and track settings used
                     if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
                         old_preview = st.session_state.processed_preview
                         del old_preview
                     st.session_state.processed_preview = processed_image
                     st.session_state.processed_preview_size = target_size
+                    st.session_state.current_refinement_setting = use_refinement
                 else:
                     processed_image = st.session_state.processed_preview
 
-                st.markdown(f"**Background Removed (Auto) - {target_size[0]}×{target_size[1]}:**")
+                preview_label = f"**Processed Preview - {target_size[0]}×{target_size[1]}**"
+                if use_refinement:
+                    preview_label += " *(with refinement)*"
+                else:
+                    preview_label += " *(background removed)*"
+                st.markdown(preview_label)
                 st.image(processed_image, use_container_width=True)
             else:
-                st.info("Background removal preview will be shown after pipeline loads")
+                st.info("Processed preview will be shown after pipeline loads")
                 st.session_state.processed_preview = None
     
     @staticmethod
@@ -937,7 +966,6 @@ class SingleImageUI:
         generate_key: str,
         seed_key: str,
         randomize_key: str,
-        refinement_key: str,
         ss_strength_key: str,
         ss_steps_key: str,
         slat_strength_key: str,
@@ -961,7 +989,6 @@ class SingleImageUI:
             generate_key: Unique key for generate button
             seed_key: Unique key for seed slider
             randomize_key: Unique key for randomize checkbox
-            refinement_key: Unique key for refinement checkbox
             ss_strength_key: Unique key for sparse structure guidance strength
             ss_steps_key: Unique key for sparse structure sampling steps
             slat_strength_key: Unique key for slat guidance strength
@@ -1045,12 +1072,6 @@ class SingleImageUI:
             
             seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
             randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
-            use_refinement = st.checkbox(
-                "Image Refinement (SSD-1B)",
-                value=preset_settings["refinement"],
-                help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
-                key=refinement_key
-            )
 
             # Auto-adjust guidance based on input consistency
             auto_adjust_guidance = st.checkbox(
@@ -1263,11 +1284,10 @@ class SingleImageUI:
                         if is_multi_image:
                             # Multi-image generation
                             with st.spinner("Processing multiple images..."):
+                                # Get refinement setting from input checkbox
+                                use_refinement = st.session_state.get("refinement_multi_input", False)
                                 images = [Image.open(f) for f in uploaded_data]
 
-                                if use_refinement:
-                                    st.info("Applying image refinement to all images...")
-                                    images = [ImageProcessor.apply_refinement(img) for img in images]
                                 trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
                                     images,
                                     use_refinement
@@ -1313,6 +1333,8 @@ class SingleImageUI:
                         else:
                             # Single-image generation
                             with st.spinner("Generating 3D model..."):
+                                # Get refinement setting from input checkbox
+                                use_refinement = st.session_state.get("refinement_single_input", False)
                                 if st.session_state.get('processed_preview') is not None:
                                     processed_image = st.session_state.processed_preview
                                     trial_id = str(uuid.uuid4())
@@ -1476,7 +1498,6 @@ class SingleImageUI:
             generate_key="generate_single",
             seed_key="seed_single",
             randomize_key="randomize_single",
-            refinement_key="refinement_single",
             ss_strength_key="ss_strength_single",
             ss_steps_key="ss_steps_single",
             slat_strength_key="slat_strength_single",
@@ -1571,8 +1592,16 @@ class MultiImageUI:
                 for i, uploaded_file in enumerate(multi_uploaded_files):
                     image = Image.open(uploaded_file)
                     st.image(image, caption=f"Image {i+1}", use_container_width=True)
-                
-                # Auto-process and show background-removed previews
+
+                # Image refinement checkbox
+                use_refinement = st.checkbox(
+                    "Apply Image Refinement (SSD-1B)",
+                    value=False,  # Default to False to avoid confusion
+                    help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s per image.",
+                    key="refinement_multi_input"
+                )
+
+                # Auto-process and show final processed previews
                 pipeline = StateManager.get_pipeline()
                 if pipeline is not None:
                     # Use current resize dimensions if set, otherwise use default
@@ -1580,14 +1609,25 @@ class MultiImageUI:
                     current_height = st.session_state.get("resize_height", 518)
                     target_size = (current_width, current_height)
 
-                    st.markdown(f"**Background Removed (Auto) - {target_size[0]}×{target_size[1]}:**")
+                    preview_label = f"**Processed Previews - {target_size[0]}×{target_size[1]}**"
+                    if use_refinement:
+                        preview_label += " *(with refinement)*"
+                    else:
+                        preview_label += " *(background removed)*"
+                    st.markdown(preview_label)
+
                     with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                         for i, uploaded_file in enumerate(multi_uploaded_files):
                             image = Image.open(uploaded_file)
                             processed_image = pipeline.preprocess_image(image, target_size)
+
+                            # Apply refinement if enabled
+                            if use_refinement:
+                                processed_image = ImageProcessor.apply_refinement(processed_image)
+
                             st.image(processed_image, caption=f"Processed {i+1}", use_container_width=True)
                 else:
-                    st.info("Background removal preview will be shown after pipeline loads")
+                    st.info("Processed previews will be shown after pipeline loads")
     
     @staticmethod
     def _render_output_column() -> None:
@@ -1609,7 +1649,6 @@ class MultiImageUI:
             generate_key="generate_multi",
             seed_key="seed_multi",
             randomize_key="randomize_multi",
-            refinement_key="refinement_multi",
             ss_strength_key="ss_strength_multi",
             ss_steps_key="ss_steps_multi",
             slat_strength_key="slat_strength_multi",
