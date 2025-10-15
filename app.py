@@ -851,7 +851,12 @@ class SingleImageUI:
     def _render_input_column() -> None:
         """Render the input column."""
         st.subheader("Input")
-        
+
+        # Restore preserved data if main data is lost (happens after st.rerun or generation)
+        if st.session_state.get("single_image") is None and st.session_state.get("_preserved_single_image"):
+            # We can't restore file uploader state directly, but we can restore the StateManager image
+            StateManager.set_uploaded_image(st.session_state["_preserved_single_image"])
+
         # File uploader
         uploaded_file = st.file_uploader(
             "Upload Image",
@@ -1090,11 +1095,17 @@ class SingleImageUI:
             if st.button(button_label, type="primary", key=generate_key, use_container_width=True, disabled=button_disabled):
                 try:
                     StateManager.set_generating(True)
-                    
+
+                    # Preserve uploaded data in session state to prevent loss during generation
+                    if is_multi_image and uploaded_data:
+                        st.session_state["_preserved_multi_images"] = uploaded_data
+                    elif not is_multi_image and uploaded_data:
+                        st.session_state["_preserved_single_image"] = uploaded_data
+
                     # Clear processed preview on regeneration to respect current refinement setting
                     if has_generated and not is_multi_image:
                         st.session_state.processed_preview = None
-                    
+
                     if is_multi_image:
                         # Multi-image generation
                         with st.spinner("Processing multiple images..."):
@@ -1169,13 +1180,13 @@ class SingleImageUI:
                             
                             state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
                     
-                    # Exit spinner context before setting state and rerunning
+                    # Exit spinner context before setting state
                     StateManager.set_generated_glb(None)
                     StateManager.set_generated_video(video_path)
                     StateManager.set_generated_state(state)
-                    
+
                     StateManager.set_generating(False)
-                    st.rerun()
+                    # No st.rerun() needed - Streamlit will automatically update the UI when session state changes
                 except Exception as e:
                     StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
@@ -1269,7 +1280,7 @@ class SingleImageUI:
                 glb_path, _ = GLBExporter.extract(generated_state, export_params)
                 StateManager.set_generated_glb(glb_path)
                 st.success("✅ 3D model complete!")
-                st.rerun()
+                # No st.rerun() needed - Streamlit will automatically update the UI when session state changes
         
     
     @staticmethod
@@ -1357,7 +1368,11 @@ class MultiImageUI:
     def _render_input_column() -> None:
         """Render the input column."""
         st.subheader("Input")
-        
+
+        # Restore preserved data if main data is lost (happens after st.rerun or generation)
+        if st.session_state.get("multi_images") is None and st.session_state.get("_preserved_multi_images"):
+            st.session_state["multi_images"] = st.session_state["_preserved_multi_images"]
+
         multi_uploaded_files = st.file_uploader(
             "Upload Images (2-4 images)",
             type=["png", "jpg", "jpeg"],
@@ -1401,9 +1416,11 @@ class MultiImageUI:
     def _render_output_column() -> None:
         """Render the output column."""
         st.subheader("Output")
-        
-        # Get uploaded files from the input column
+
+        # Get uploaded files from the input column, with fallback to preserved data
         multi_uploaded_files = st.session_state.get("multi_images")
+        if multi_uploaded_files is None:
+            multi_uploaded_files = st.session_state.get("_preserved_multi_images")
         
         # Use unified generation panel component
         SingleImageUI._render_generation_panel(
