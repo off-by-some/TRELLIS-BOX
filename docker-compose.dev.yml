@@ -1,10 +1,12 @@
-version: '3.8'
-
 services:
   trellis:
     # Use same GPU config as working docker-compose.yml
     environment:
       - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+      # Enable hot reloading and better development experience
+      - STREAMLIT_SERVER_HEADLESS=false
+      # Explicitly bind Streamlit to all interfaces
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     deploy:
       resources:
         reservations:
@@ -23,11 +25,6 @@ services:
       # Skip docs/ and assets/ - not essential for development
       # NOT mounted: trellis/ (installed package - rebuild for changes)
       # NOT mounted: extensions/ (compiled C++ code)
-    environment:
-      # Enable hot reloading and better development experience
-      - STREAMLIT_SERVER_HEADLESS=false
-      # Explicitly bind Streamlit to all interfaces
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     stdin_open: true
     tty: true
     networks:
