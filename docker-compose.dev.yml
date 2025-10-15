@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  trellis:
+    volumes:
+      # Mount source code for hot reloading in development
+      - ./app.py:/app/app.py
+      - ./trellis:/app/trellis
+      - ./webui:/app/webui
+      - ./docs:/app/docs
+      - ./assets:/app/assets
+      - ./extensions:/app/extensions
+    environment:
+      # Enable hot reloading
+      - STREAMLIT_SERVER_HEADLESS=false
+    stdin_open: true
+    tty: true

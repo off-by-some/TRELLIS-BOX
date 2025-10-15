@@ -19,12 +19,18 @@ To get up and running, you can build the repository to build from source:
 ```bash
 $ git clone https://github.com/off-by-some/TRELLIS-BOX && cd TRELLIS-BOX
 $ ./trellis.sh run
-``` 
+```
+
+**Development Mode (with hot reloading):**
+```bash
+$ ./trellis.sh run --dev
+```
+This mounts your source code into the container, enabling automatic code reloading when you make changes. Perfect for development and debugging!
 
 Or if you prefer, pull and run the pre-built Docker image:
 ```bash
 $ docker run --gpus all -it -p 8501:8501 \
-              -v ~/.cache/trellis-box:/root/.cache \ 
+              -v ~/.cache/trellis-box:/root/.cache \
               -v ~/.cache/rembg:/root/.u2net \
               -v $(pwd)/outputs:/tmp/Trellis-demo \
             cassidybridges/trellis-box:latest

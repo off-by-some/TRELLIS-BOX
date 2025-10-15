@@ -36,7 +36,7 @@ STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
 STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
 
 # =============================================================================
-# Usage: ./scripts/run.sh [--diagnostics|-d]
+# Usage: ./scripts/run.sh [--diagnostics|-d] [--dev|-v]
 # =============================================================================
 
 # Colors for output
@@ -332,25 +332,34 @@ main() {
     echo "======================="
 
     # Parse command line arguments
-    if [ "$1" = "--diagnostics" ] || [ "$1" = "-d" ]; then
-        print_status "Running GPU diagnostics mode"
+    DEV_MODE=false
+    for arg in "$@"; do
+        case $arg in
+            --dev|-v)
+                DEV_MODE=true
+                print_status "Development mode enabled (hot reloading)"
+                ;;
+            --diagnostics|-d)
+                print_status "Running GPU diagnostics mode"
 
-        # Determine GPU access method (same logic as main run)
-        if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-            GPU_FLAG="--gpus all"
-            print_status "GPU access method: --gpus all"
-        elif docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-            GPU_FLAG="--runtime=nvidia"
-            print_status "GPU access method: --runtime=nvidia"
-        else
-            print_error "GPU access verification failed"
-            print_error "Run './scripts/check_gpu.sh' for diagnostics"
-            exit 1
-        fi
+                # Determine GPU access method (same logic as main run)
+                if docker run --gpus all --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+                    GPU_FLAG="--gpus all"
+                    print_status "GPU access method: --gpus all"
+                elif docker run --runtime=nvidia --rm nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
+                    GPU_FLAG="--runtime=nvidia"
+                    print_status "GPU access method: --runtime=nvidia"
+                else
+                    print_error "GPU access verification failed"
+                    print_error "Run './scripts/check_gpu.sh' for diagnostics"
+                    exit 1
+                fi
 
-        run_cuda_diagnostics
-        exit 0
-    fi
+                run_cuda_diagnostics
+                exit 0
+                ;;
+        esac
+    done
 
     # Check GPU access first
     check_gpu_access
@@ -358,20 +367,40 @@ main() {
     # Check GPU memory
     check_gpu_memory
 
-    # Stop any running container
-    stop_container
+    if [ "$DEV_MODE" = true ]; then
+        # Development mode: use docker-compose with dev override
+        print_status "Starting in development mode (hot reloading enabled)"
 
-    # Remove existing container
-    remove_container
+        # Stop any existing containers
+        print_status "Stopping existing containers..."
+        docker-compose down > /dev/null 2>&1
 
-    # Clean up old images
-    cleanup_old_images
+        # Build and start with dev override
+        if docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build; then
+            print_success "Development container stopped"
+        else
+            print_error "Failed to start development container"
+            exit 1
+        fi
+    else
+        # Production mode: use direct docker run
+        print_status "Starting in production mode"
 
-    # Always rebuild (since it copies local code)
-    build_image
+        # Stop any running container
+        stop_container
 
-    # Start the container
-    start_container
+        # Remove existing container
+        remove_container
+
+        # Clean up old images
+        cleanup_old_images
+
+        # Always rebuild (since it copies local code)
+        build_image
+
+        # Start the container
+        start_container
+    fi
 }
 
 # Run main function

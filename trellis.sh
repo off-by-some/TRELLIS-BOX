@@ -19,7 +19,7 @@ print_error() {
 print_usage() {
     echo "🚀 TRELLIS Docker Manager"
     echo ""
-    echo "Usage: $0 <command>"
+    echo "Usage: $0 <command> [options]"
     echo ""
     echo "Commands:"
     echo "  run      - Start TRELLIS (builds image, checks GPU, etc.)"
@@ -29,10 +29,16 @@ print_usage() {
     echo "  build    - Build the Docker image only"
     echo "  check    - Check GPU memory availability"
     echo ""
+    echo "Options:"
+    echo "  --dev, -v    Enable development mode with hot reloading"
+    echo "  --diagnostics, -d  Run diagnostics (run command only)"
+    echo ""
     echo "Examples:"
-    echo "  $0 run     # Start TRELLIS with full setup"
-    echo "  $0 status  # Check current status"
-    echo "  $0 stop    # Stop TRELLIS"
+    echo "  $0 run                    # Start TRELLIS with full setup"
+    echo "  $0 run --dev              # Start in development mode (hot reloading)"
+    echo "  $0 status                 # Check current status"
+    echo "  $0 stop                   # Stop TRELLIS"
+    echo "  $0 run --diagnostics      # Run GPU diagnostics"
 }
 
 # Check if scripts directory exists

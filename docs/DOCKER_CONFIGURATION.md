@@ -234,7 +234,45 @@ IMAGE_TAG=dev ./scripts/build.sh
 IMAGE_TAG=v1.0.0 ./scripts/build.sh --no-cache
 ```
 
-### Use Case 6: Custom Cache Directories
+### Use Case 6: Development Mode with Hot Reloading
+
+For active development with automatic code reloading:
+
+```bash
+# Use docker-compose with development override
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+# Or set DEV environment variable (if your scripts support it)
+DEV=true ./scripts/run.sh
+```
+
+**What gets mounted in dev mode:**
+- `app.py` - Main Streamlit application
+- `trellis/` - Core TRELLIS pipeline code
+- `webui/` - Web UI components
+- `docs/` - Documentation files
+- `assets/` - Static assets and examples
+- `extensions/` - Custom extensions (nvdiffrast, etc.)
+
+**Benefits:**
+- ✅ **Hot reloading**: Changes to Python files are reflected immediately
+- ✅ **Faster iteration**: No need to rebuild Docker image for code changes
+- ✅ **Debug friendly**: Direct access to source code for debugging
+- ✅ **Persistent caches**: Models and dependencies remain cached
+
+**When to use dev mode:**
+- Active development and testing
+- Debugging application issues
+- UI/UX improvements
+- Adding new features
+
+**When to use production mode:**
+- Deployment to production servers
+- When code changes are infrequent
+- Maximum performance optimization
+- Minimal container size requirements
+
+### Use Case 7: Custom Cache Directories
 
 Run multiple instances with separate caches:
 
@@ -264,7 +302,7 @@ docker-compose --env-file .env.dev up -d
 docker-compose --env-file .env.prod -p trellis-prod up -d
 ```
 
-### Use Case 7: Centralized Cache Storage
+### Use Case 8: Centralized Cache Storage
 
 Use a shared cache location across multiple projects:
 
@@ -281,7 +319,7 @@ docker-compose build
 docker-compose up
 ```
 
-### Use Case 8: Store Caches on Fast Storage
+### Use Case 9: Store Caches on Fast Storage
 
 Put caches on SSD for better performance:
 
