@@ -1132,19 +1132,36 @@ class SingleImageUI:
                 )
 
                 st.markdown("**Texture Settings**")
-                texture_size = st.slider(
+                # Texture size must be power of 2 for mip-mapping
+                texture_size_options = [256, 512, 1024, 2048, 4096]
+                current_texture_size = st.session_state.get('texture_size', default_texture_size)
+                # Find the closest valid option to the current/default value
+                if current_texture_size not in texture_size_options:
+                    current_texture_size = min(texture_size_options, key=lambda x: abs(x - current_texture_size))
+
+                texture_size = st.selectbox(
                     "Texture Size",
-                    256, 4096, st.session_state.get('texture_size', default_texture_size), 256,
+                    options=texture_size_options,
+                    index=texture_size_options.index(current_texture_size),
                     key=texture_key,
-                    help="Resolution of the texture (higher = sharper textures but larger file)"
+                    help="Resolution of the texture (must be power of 2 for mip-mapping). Higher = sharper textures but larger file.",
+                    format_func=lambda x: f"{x}px"
                 )
 
                 st.markdown("**Hole Filling Settings**")
-                fill_holes_resolution = st.slider(
+                # Hole filling resolution should also be power of 2 for consistency
+                fill_res_options = [256, 512, 1024, 2048, 4096]
+                current_fill_res = st.session_state.get('fill_holes_resolution', default_fill_holes_resolution)
+                if current_fill_res not in fill_res_options:
+                    current_fill_res = min(fill_res_options, key=lambda x: abs(x - current_fill_res))
+
+                fill_holes_resolution = st.selectbox(
                     "Hole Fill Resolution",
-                    256, 4096, st.session_state.get('fill_holes_resolution', default_fill_holes_resolution), 256,
+                    options=fill_res_options,
+                    index=fill_res_options.index(current_fill_res),
                     key=f"fill_res_{trial_id}",
-                    help="Resolution used for hole filling algorithm"
+                    help="Resolution used for hole filling algorithm (power of 2 recommended).",
+                    format_func=lambda x: f"{x}px"
                 )
 
                 fill_holes_num_views = st.slider(
