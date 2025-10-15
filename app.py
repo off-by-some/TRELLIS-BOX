@@ -241,18 +241,12 @@ class MemoryManager:
         # Cleanup pipeline resources
         pipeline = StateManager.get_pipeline()
         if pipeline is not None:
-            try:
-                pipeline.cleanup()
-            except Exception as e:
-                print(f"Error during pipeline cleanup: {e}")
-        
+            pipeline.cleanup()
+
         # Cleanup refiner if loaded
         refiner = StateManager.get_refiner()
         if refiner is not None:
-            try:
-                refiner.unload()
-            except Exception as e:
-                print(f"Error during refiner cleanup: {e}")
+            refiner.unload()
         
         # Force garbage collection and CUDA cleanup
         reduce_memory_usage()
@@ -299,41 +293,30 @@ class ImageProcessor:
         """
         Apply SSD-1B (Segmind Stable Diffusion) refinement to improve input image quality.
         Loads refiner lazily and unloads after use to conserve VRAM.
-        
+
         Args:
             image: Input PIL Image
-            
+
         Returns:
             Refined PIL Image
         """
         refiner = StateManager.get_refiner()
-        
+
         if refiner is None:
-            try:
-                print("Loading SSD-1B Refiner (Segmind Stable Diffusion)...")
-                refiner = ImageRefiner(device="cuda", use_fp16=True)
-                StateManager.set_refiner(refiner)
-            except Exception as e:
-                print(f"Failed to load refiner: {e}, skipping refinement")
-                return image
-        
+            print("Loading SSD-1B Refiner (Segmind Stable Diffusion)...")
+            refiner = ImageRefiner(device="cuda", use_fp16=True)
+            StateManager.set_refiner(refiner)
+
         # Apply refinement
-        if refiner is not None:
-            try:
-                refined_image = refiner.refine(
-                    image,
-                    strength=0.3,  # Subtle refinement to preserve original
-                    guidance_scale=7.5,
-                    num_inference_steps=20,
-                    prompt="high quality, detailed, sharp, clean",
-                    negative_prompt="blurry, low quality, distorted, artifacts"
-                )
-                return refined_image
-            except Exception as e:
-                print(f"Refinement failed: {e}, using original image")
-                return image
-        
-        return image
+        refined_image = refiner.refine(
+            image,
+            strength=0.3,  # Subtle refinement to preserve original
+            guidance_scale=7.5,
+            num_inference_steps=20,
+            prompt="high quality, detailed, sharp, clean",
+            negative_prompt="blurry, low quality, distorted, artifacts"
+        )
+        return refined_image
     
     @staticmethod
     def preprocess_single_image(image: Image.Image, use_refinement: bool = False) -> Tuple[str, Image.Image]:
