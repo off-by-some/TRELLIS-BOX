@@ -118,20 +118,27 @@ class SingleImageUI:
                 )
 
                 if needs_regeneration:
-                    with st.spinner("Processing image..."):
-                        result = controller.process_image(uploaded_image, use_refinement)
-                        processed_image = result.processed_images
-                        StateManager.set_processed_preview(processed_image)
-                        st.session_state.processed_preview_size = target_size
-                        st.session_state.current_refinement_setting = use_refinement
+                    pipeline = StateManager.get_pipeline()
+                    if pipeline is not None:
+                        with st.spinner("Processing image..."):
+                            result = controller.process_image(uploaded_image, use_refinement)
+                            processed_image = result.processed_images
+                            StateManager.set_processed_preview(processed_image)
+                            st.session_state.processed_preview_size = target_size
+                            st.session_state.current_refinement_setting = use_refinement
+                    else:
+                        processed_image = None
 
-                preview_label = "**Processed Preview**"
-                if use_refinement:
-                    preview_label += " *(with refinement)*"
+                if processed_image is not None:
+                    preview_label = "**Processed Preview**"
+                    if use_refinement:
+                        preview_label += " *(with refinement)*"
+                    else:
+                        preview_label += " *(background removed)*"
+                    st.markdown(preview_label)
+                    st.image(processed_image, use_container_width=True)
                 else:
-                    preview_label += " *(background removed)*"
-                st.markdown(preview_label)
-                st.image(processed_image, use_container_width=True)
+                    st.info("Processed preview will be shown after pipeline loads")
             else:
                 st.info("Processed preview will be shown after pipeline loads")
 
