@@ -1095,6 +1095,10 @@ class SingleImageUI:
                     "Premium (Max Quality)": {"simplify": 0.98, "texture": 2048, "fill_res": 2048, "fill_views": 2000}
                 }
 
+                # Track preset changes to reset sliders
+                preset_key = f"current_preset_{trial_id}"
+                previous_preset = st.session_state.get(preset_key)
+
                 mesh_quality = st.selectbox(
                     "Mesh Quality",
                     options=list(mesh_quality_options.keys()),
@@ -1103,6 +1107,14 @@ class SingleImageUI:
                     help="Controls mesh detail and processing quality. Higher quality = more detailed mesh but slower processing."
                 )
 
+                # Reset slider values when preset changes
+                if mesh_quality != previous_preset:
+                    # Clear session state for export settings when preset changes
+                    for key in ['mesh_simplify', 'texture_size', 'fill_holes_resolution', 'fill_holes_num_views']:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.session_state[preset_key] = mesh_quality
+
                 # Get default values from selected preset
                 quality_settings = mesh_quality_options[mesh_quality]
                 default_mesh_simplify = quality_settings["simplify"]
@@ -1110,7 +1122,7 @@ class SingleImageUI:
                 default_fill_holes_resolution = quality_settings["fill_res"]
                 default_fill_holes_num_views = quality_settings["fill_views"]
 
-                # Fine-tune controls (use session state values, or preset defaults)
+                # Fine-tune controls (preset sets defaults, user adjustments are preserved until preset changes)
                 st.markdown("**Mesh Settings**")
                 mesh_simplify = st.slider(
                     "Mesh Simplify Ratio",
