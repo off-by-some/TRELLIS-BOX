@@ -8,8 +8,8 @@ import torch
 from typing import Optional, Dict, Any, Tuple, List
 from PIL import Image
 
-from controllers.memory_controller import MemoryController
-from controllers.generation_controller import GenerationController
+from .memory_controller import MemoryController
+from .generation_controller import GenerationController
 from library.models import GenerationParams, ExportParams
 from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
 
