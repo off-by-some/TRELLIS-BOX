@@ -690,7 +690,7 @@ class ModelGenerator:
         st.session_state['generation_contradiction'] = contradiction
 
         # Check if auto-adjust guidance is enabled
-        auto_adjust_enabled = st.session_state.get(f"auto_adjust_{'multi' if cond.get('multi_view', False) else 'single'}", True)
+        auto_adjust_enabled = st.session_state.get(f"auto_adjust_{'multi' if cond.get('multi_view', False) else 'single'}", False)
 
         # Display guidance information
         if auto_adjust_enabled and cond.get('multi_view', False):
@@ -986,26 +986,40 @@ class SingleImageUI:
             # Auto-adjust guidance based on input consistency
             auto_adjust_guidance = st.checkbox(
                 "Auto-adjust guidance based on input consistency",
-                value=True,
+                value=False,  # Off by default as requested
                 help="Automatically optimize guidance strength based on how consistent your input images are. Recommended for best results.",
                 key=f"auto_adjust_{trial_id}"
             )
 
-            # Manual guidance sliders (only shown when auto-adjust is disabled)
-            if not auto_adjust_guidance:
-                ss_strength = st.slider(
-                    "Sparse Structure Guidance", 0.0, 15.0, 7.5, 0.1,
-                    help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
-                    key=ss_strength_key
-                )
-                slat_strength = st.slider(
-                    "SLAT Guidance", 0.0, 10.0, 3.0, 0.1,
-                    help="Higher values = stronger adherence to structured latent features",
-                    key=slat_strength_key
-                )
-            else:
-                # Show current auto values (will be calculated later)
-                st.info("Guidance strength will be automatically optimized based on your input consistency")
+            # Compute optimal guidance values if auto-adjust is enabled
+            optimal_ss = 7.5
+            optimal_slat = 3.0
+            if auto_adjust_guidance:
+                # Get stored analysis results for computing optimal guidance
+                stored_cond = st.session_state.get('generation_cond')
+                stored_contradiction = st.session_state.get('generation_contradiction', 0.0)
+                if stored_cond and stored_cond.get('multi_view', False):
+                    guidance_multiplier = 1.0 + (stored_contradiction * 0.5)
+                    optimal_ss = min(7.5 * guidance_multiplier, 15.0)
+                    optimal_slat = min(3.0 * guidance_multiplier, 10.0)
+                # For single view, keep defaults
+
+            # Guidance sliders (always shown, but with different defaults based on auto-adjust)
+            ss_strength = st.slider(
+                "Sparse Structure Guidance", 0.0, 15.0, optimal_ss, 0.1,
+                help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
+                key=ss_strength_key,
+                disabled=auto_adjust_guidance
+            )
+            slat_strength = st.slider(
+                "SLAT Guidance", 0.0, 10.0, optimal_slat, 0.1,
+                help="Higher values = stronger adherence to structured latent features",
+                key=slat_strength_key,
+                disabled=auto_adjust_guidance
+            )
+
+            if auto_adjust_guidance:
+                st.info(f"Guidance automatically optimized: SS {optimal_ss:.1f}, SLAT {optimal_slat:.1f}")
 
             # Resize dimensions for conditioning model
             st.markdown("**Resize Dimensions**")
@@ -1046,15 +1060,11 @@ class SingleImageUI:
             st.markdown("**Stage 1: Sparse Structure Generation**")
             ss_col1, ss_col2 = st.columns(2)
             with ss_col1:
-                ss_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 7.5, 0.1, key=ss_strength_key)
-            with ss_col2:
                 ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
 
             st.markdown("**Stage 2: Structured Latent Generation**")
             slat_col1, slat_col2 = st.columns(2)
             with slat_col1:
-                slat_guidance_strength = st.slider("Guidance Strength", 0.0, 10.0, 3.0, 0.1, key=slat_strength_key)
-            with slat_col2:
                 slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
 
         # GLB Export Settings (always shown when input is available)
@@ -1096,28 +1106,23 @@ class SingleImageUI:
                                 use_refinement
                             )
                             
-                            # Get analysis results from session state
+                            # Get analysis results and UI values from session state
                             cond = st.session_state.get('generation_cond')
                             contradiction = st.session_state.get('generation_contradiction', 0.0)
 
-                            # Calculate final guidance values based on auto-adjust setting
-                            auto_adjust_enabled = st.session_state.get("auto_adjust_multi", True)
-                            if auto_adjust_enabled and cond and cond.get('multi_view', False):
-                                # Multi-view auto-adjust: use contradiction-based values
-                                guidance_multiplier = 1.0 + (contradiction * 0.5)
-                                final_ss_strength = min(ss_guidance_strength * guidance_multiplier, 15.0)
-                                final_slat_strength = min(slat_guidance_strength * guidance_multiplier, 10.0)
-                            else:
-                                # Single-view or manual mode: use original values
-                                final_ss_strength = ss_guidance_strength
-                                final_slat_strength = slat_guidance_strength
+                            # Get all UI values from session state (stored by Streamlit widgets)
+                            # Use the multi-view keys since this is multi-view generation
+                            ss_guidance_strength = st.session_state.get("ss_strength_multi", 7.5)
+                            slat_guidance_strength = st.session_state.get("slat_strength_multi", 3.0)
+                            ss_sampling_steps = st.session_state.get("ss_steps_multi", 12)
+                            slat_sampling_steps = st.session_state.get("slat_steps_multi", 12)
 
                             params = GenerationParams(
                                 seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
                                 randomize_seed=randomize_seed,
-                                ss_guidance_strength=final_ss_strength,
+                                ss_guidance_strength=ss_guidance_strength,
                                 ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=final_slat_strength,
+                                slat_guidance_strength=slat_guidance_strength,
                                 slat_sampling_steps=slat_sampling_steps
                             )
 
@@ -1142,24 +1147,20 @@ class SingleImageUI:
                                     uploaded_data,
                                     use_refinement
                                 )
-                            
-                            # Calculate final guidance values for single-view
-                            single_auto_adjust = st.session_state.get("auto_adjust_single", True)
-                            if single_auto_adjust:
-                                # Single-view auto-adjust: use default optimized values
-                                final_ss_strength = ss_guidance_strength  # Keep defaults for single-view
-                                final_slat_strength = slat_guidance_strength
-                            else:
-                                # Manual mode: use slider values
-                                final_ss_strength = ss_guidance_strength
-                                final_slat_strength = slat_guidance_strength
+
+                            # Get all UI values from session state (stored by Streamlit widgets)
+                            # Use the single-view keys since this is single-view generation
+                            ss_guidance_strength = st.session_state.get("ss_strength_single", 7.5)
+                            slat_guidance_strength = st.session_state.get("slat_strength_single", 3.0)
+                            ss_sampling_steps = st.session_state.get("ss_steps_single", 12)
+                            slat_sampling_steps = st.session_state.get("slat_steps_single", 12)
 
                             params = GenerationParams(
                                 seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
                                 randomize_seed=randomize_seed,
-                                ss_guidance_strength=final_ss_strength,
+                                ss_guidance_strength=ss_guidance_strength,
                                 ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=final_slat_strength,
+                                slat_guidance_strength=slat_guidance_strength,
                                 slat_sampling_steps=slat_sampling_steps
                             )
                             
