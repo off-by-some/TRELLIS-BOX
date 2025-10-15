@@ -1110,44 +1110,62 @@ class SingleImageUI:
                 fill_holes_resolution = quality_settings["fill_res"]
                 fill_holes_num_views = quality_settings["fill_views"]
 
-                # Advanced Settings
-                with st.expander("Advanced Settings", expanded=False):
-                    st.markdown("**Mesh Settings**")
-                    mesh_simplify = st.slider(
-                        "Mesh Simplify Ratio",
-                        0.8, 0.99, mesh_simplify, 0.01,
-                        key=simplify_key,
-                        help="Ratio of faces to keep (higher = more detailed mesh)"
-                    )
-
-                    st.markdown("**Texture Settings**")
-                    texture_size = st.slider(
-                        "Texture Size",
-                        256, 4096, texture_size, 256,
-                        key=texture_key,
-                        help="Resolution of the texture (higher = sharper textures but larger file)"
-                    )
-
-                    st.markdown("**Hole Filling Settings**")
-                    fill_holes_resolution = st.slider(
-                        "Hole Fill Resolution",
-                        256, 4096, fill_holes_resolution, 256,
-                        key=f"fill_res_{trial_id}",
-                        help="Resolution used for hole filling algorithm"
-                    )
-
-                    fill_holes_num_views = st.slider(
-                        "Hole Fill Views",
-                        100, 4000, fill_holes_num_views, 100,
-                        key=f"fill_views_{trial_id}",
-                        help="Number of views used for hole filling (higher = better hole filling but slower)"
-                    )
+                # Show current preset values
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Mesh Detail", f"{mesh_simplify:.0%}")
+                with col2:
+                    st.metric("Texture", f"{texture_size}px")
+                with col3:
+                    st.metric("Hole Fill Res", f"{fill_holes_resolution}px")
+                with col4:
+                    st.metric("Views", fill_holes_num_views)
 
                 # Store current settings in session state for GLB extraction
                 st.session_state['mesh_simplify'] = mesh_simplify
                 st.session_state['texture_size'] = texture_size
                 st.session_state['fill_holes_resolution'] = fill_holes_resolution
                 st.session_state['fill_holes_num_views'] = fill_holes_num_views
+
+            # Advanced Settings (separate expander, not nested)
+            with st.expander("Advanced Export Settings", expanded=False):
+                st.markdown("**Mesh Settings**")
+                # Override preset values with advanced controls
+                advanced_mesh_simplify = st.slider(
+                    "Mesh Simplify Ratio",
+                    0.8, 0.99, st.session_state.get('mesh_simplify', 0.95), 0.01,
+                    key=simplify_key,
+                    help="Ratio of faces to keep (higher = more detailed mesh)"
+                )
+
+                st.markdown("**Texture Settings**")
+                advanced_texture_size = st.slider(
+                    "Texture Size",
+                    256, 4096, st.session_state.get('texture_size', 1024), 256,
+                    key=texture_key,
+                    help="Resolution of the texture (higher = sharper textures but larger file)"
+                )
+
+                st.markdown("**Hole Filling Settings**")
+                advanced_fill_holes_resolution = st.slider(
+                    "Hole Fill Resolution",
+                    256, 4096, st.session_state.get('fill_holes_resolution', 1024), 256,
+                    key=f"fill_res_{trial_id}",
+                    help="Resolution used for hole filling algorithm"
+                )
+
+                advanced_fill_holes_num_views = st.slider(
+                    "Hole Fill Views",
+                    100, 4000, st.session_state.get('fill_holes_num_views', 1000), 100,
+                    key=f"fill_views_{trial_id}",
+                    help="Number of views used for hole filling (higher = better hole filling but slower)"
+                )
+
+                # Update session state with advanced settings
+                st.session_state['mesh_simplify'] = advanced_mesh_simplify
+                st.session_state['texture_size'] = advanced_texture_size
+                st.session_state['fill_holes_resolution'] = advanced_fill_holes_resolution
+                st.session_state['fill_holes_num_views'] = advanced_fill_holes_num_views
             
             # Generate/Regenerate button
             is_generating = StateManager.is_generating()
