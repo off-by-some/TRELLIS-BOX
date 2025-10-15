@@ -1072,7 +1072,7 @@ class SingleImageUI:
                 st.info(f"Guidance automatically optimized: SS {optimal_ss:.1f}, SLAT {optimal_slat:.1f}")
 
         # GLB Export Settings (always shown when input is available)
-        if has_input:
+        if has_any_input:
             with st.expander("GLB Export Settings", expanded=False):
                 mesh_simplify = st.slider("Simplify", 0.9, 0.98, 0.95, 0.01, key=simplify_key)
                 texture_size = st.slider("Texture Size", 512, 2048, 1024, 512, key=texture_key)
