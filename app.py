@@ -15,6 +15,7 @@ warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*rename
 warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
+
 os.environ['SPCONV_ALGO'] = 'native'
 # Memory optimizations for Trellis workloads
 # Use backend_alloc:cudaMallocAsync for better memory management with PyTorch 2.0+
@@ -888,29 +889,27 @@ class SingleImageUI:
                     # Valid resize options (multiples of 14)
                     valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
 
-                    resize_col1, resize_col2 = st.columns(2)
-                    with resize_col1:
-                        resize_width = st.selectbox(
-                            "Resize Width",
-                            options=valid_sizes,
-                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                            key="resize_width_single",
-                            help="Width to resize images to for conditioning model (must be multiple of 14)",
-                            format_func=lambda x: f"{x}px"
-                        )
-                        # Store in session state for use in generation
-                        st.session_state["resize_width"] = resize_width
-                    with resize_col2:
-                        resize_height = st.selectbox(
-                            "Resize Height",
-                            options=valid_sizes,
-                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                            key="resize_height_single",
-                            help="Height to resize images to for conditioning model (must be multiple of 14)",
-                            format_func=lambda x: f"{x}px"
-                        )
-                        # Store in session state for use in generation
-                        st.session_state["resize_height"] = resize_height
+                    resize_width = st.selectbox(
+                        "Resize Width",
+                        options=valid_sizes,
+                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                        key="resize_width_single",
+                        help="Width to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
+                    )
+                    # Store in session state for use in generation
+                    st.session_state["resize_width"] = resize_width
+
+                    resize_height = st.selectbox(
+                        "Resize Height",
+                        options=valid_sizes,
+                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                        key="resize_height_single",
+                        help="Height to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
+                    )
+                    # Store in session state for use in generation
+                    st.session_state["resize_height"] = resize_height
 
             st.markdown("**Uploaded Image:**")
             st.image(uploaded_image, use_container_width=True)
@@ -1587,29 +1586,27 @@ class MultiImageUI:
                         # Valid resize options (multiples of 14)
                         valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
 
-                        resize_col1, resize_col2 = st.columns(2)
-                        with resize_col1:
-                            resize_width = st.selectbox(
-                                "Resize Width",
-                                options=valid_sizes,
-                                index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                                key="resize_width_multi",
-                                help="Width to resize images to for conditioning model (must be multiple of 14)",
-                                format_func=lambda x: f"{x}px"
-                            )
-                            # Store in session state for use in generation
-                            st.session_state["resize_width"] = resize_width
-                        with resize_col2:
-                            resize_height = st.selectbox(
-                                "Resize Height",
-                                options=valid_sizes,
-                                index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                                key="resize_height_multi",
-                                help="Height to resize images to for conditioning model (must be multiple of 14)",
-                                format_func=lambda x: f"{x}px"
-                            )
-                            # Store in session state for use in generation
-                            st.session_state["resize_height"] = resize_height
+                        resize_width = st.selectbox(
+                            "Resize Width",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key="resize_width_multi",
+                            help="Width to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
+                        # Store in session state for use in generation
+                        st.session_state["resize_width"] = resize_width
+
+                        resize_height = st.selectbox(
+                            "Resize Height",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key="resize_height_multi",
+                            help="Height to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
+                        # Store in session state for use in generation
+                        st.session_state["resize_height"] = resize_height
 
                 st.markdown("**Uploaded Images:**")
                 for i, uploaded_file in enumerate(multi_uploaded_files):
