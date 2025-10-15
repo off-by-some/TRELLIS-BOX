@@ -23,6 +23,7 @@ print_usage() {
     echo ""
     echo "Commands:"
     echo "  run      - Start TRELLIS (builds image, checks GPU, etc.)"
+    echo "  dev      - Quick development mode (requires docker-compose)"
     echo "  restart  - Restart a stopped TRELLIS container"
     echo "  stop     - Stop the running TRELLIS container"
     echo "  status   - Show TRELLIS status and system info"
@@ -36,6 +37,7 @@ print_usage() {
     echo "Examples:"
     echo "  $0 run                    # Start TRELLIS with full setup"
     echo "  $0 run --dev              # Start in development mode (hot reloading)"
+    echo "  $0 dev                    # Quick dev mode (no GPU checks)"
     echo "  $0 status                 # Check current status"
     echo "  $0 stop                   # Stop TRELLIS"
     echo "  $0 run --diagnostics      # Run GPU diagnostics"
@@ -52,7 +54,7 @@ COMMAND="$1"
 
 # Validate command
 case "$COMMAND" in
-    run|restart|stop|status|build|check)
+    run|restart|stop|status|build|check|dev)
         SCRIPT="scripts/${COMMAND}.sh"
         if [ ! -f "$SCRIPT" ]; then
             print_error "Script '$SCRIPT' not found"

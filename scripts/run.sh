@@ -371,12 +371,34 @@ main() {
         # Development mode: use docker-compose with dev override
         print_status "Starting in development mode (hot reloading enabled)"
 
+        # Detect docker compose command (plugin vs standalone)
+        COMPOSE_CMD=""
+        if command -v docker-compose &> /dev/null; then
+            COMPOSE_CMD="docker-compose"
+            print_status "Using docker-compose (standalone)"
+        elif docker compose version &> /dev/null 2>&1; then
+            COMPOSE_CMD="docker compose"
+            print_status "Using docker compose (plugin)"
+        fi
+
+        if [ -z "$COMPOSE_CMD" ]; then
+            print_warning "Docker Compose not found (needed for dev mode)"
+            print_warning "Falling back to production mode..."
+            print_warning "Install Docker Compose to enable dev mode:"
+            print_warning "  https://docs.docker.com/compose/install/"
+            echo ""
+            DEV_MODE=false
+        fi
+    fi
+
+    if [ "$DEV_MODE" = true ]; then
         # Stop any existing containers
         print_status "Stopping existing containers..."
-        docker-compose down > /dev/null 2>&1
+        $COMPOSE_CMD down > /dev/null 2>&1
 
         # Build and start with dev override
-        if docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build; then
+        print_status "Building and starting development container..."
+        if $COMPOSE_CMD -f docker-compose.yml -f docker-compose.dev.yml up --build; then
             print_success "Development container stopped"
         else
             print_error "Failed to start development container"
