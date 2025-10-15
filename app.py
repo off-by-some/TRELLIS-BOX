@@ -682,8 +682,12 @@ class ModelGenerator:
         with torch.inference_mode():
             cond = pipeline.get_cond(images, target_size=(st.session_state.get("resize_width", 518), st.session_state.get("resize_height", 518)))
 
-            # Analyze contradiction for multi-view inputs
-            contradiction = pipeline.analyze_contradiction(cond)
+        # Analyze contradiction for multi-view inputs
+        contradiction = pipeline.analyze_contradiction(cond)
+
+        # Store analysis results in session state for use in generation
+        st.session_state['generation_cond'] = cond
+        st.session_state['generation_contradiction'] = contradiction
 
         # Check if auto-adjust guidance is enabled
         auto_adjust_enabled = st.session_state.get(f"auto_adjust_{'multi' if cond.get('multi_view', False) else 'single'}", True)
@@ -881,17 +885,32 @@ class SingleImageUI:
             # Auto-process and show background-removed preview
             pipeline = StateManager.get_pipeline()
             if pipeline is not None:
-                with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                    processed_image = pipeline.preprocess_image(uploaded_image)
-                
-                st.markdown("**Background Removed (Auto):**")
+                # Use current resize dimensions if set, otherwise use default
+                current_width = st.session_state.get("resize_width", 518)
+                current_height = st.session_state.get("resize_height", 518)
+                target_size = (current_width, current_height)
+
+                # Check if we need to regenerate preview due to size change
+                current_preview_size = st.session_state.get("processed_preview_size")
+                needs_regeneration = (current_preview_size != target_size or
+                                    'processed_preview' not in st.session_state or
+                                    st.session_state.processed_preview is None)
+
+                if needs_regeneration:
+                    with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+                        processed_image = pipeline.preprocess_image(uploaded_image, target_size)
+
+                    # Store preview and track the resize dimensions used
+                    if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
+                        old_preview = st.session_state.processed_preview
+                        del old_preview
+                    st.session_state.processed_preview = processed_image
+                    st.session_state.processed_preview_size = target_size
+                else:
+                    processed_image = st.session_state.processed_preview
+
+                st.markdown(f"**Background Removed (Auto) - {target_size[0]}×{target_size[1]}:**")
                 st.image(processed_image, use_container_width=True)
-                
-                # Store preview but clean up old reference first
-                if 'processed_preview' in st.session_state and st.session_state.processed_preview is not None:
-                    old_preview = st.session_state.processed_preview
-                    del old_preview
-                st.session_state.processed_preview = processed_image
             else:
                 st.info("Background removal preview will be shown after pipeline loads")
                 st.session_state.processed_preview = None
@@ -1077,8 +1096,13 @@ class SingleImageUI:
                                 use_refinement
                             )
                             
+                            # Get analysis results from session state
+                            cond = st.session_state.get('generation_cond')
+                            contradiction = st.session_state.get('generation_contradiction', 0.0)
+
                             # Calculate final guidance values based on auto-adjust setting
-                            if auto_adjust_enabled and cond.get('multi_view', False):
+                            auto_adjust_enabled = st.session_state.get("auto_adjust_multi", True)
+                            if auto_adjust_enabled and cond and cond.get('multi_view', False):
                                 # Multi-view auto-adjust: use contradiction-based values
                                 guidance_multiplier = 1.0 + (contradiction * 0.5)
                                 final_ss_strength = min(ss_guidance_strength * guidance_multiplier, 15.0)
@@ -1354,11 +1378,16 @@ class MultiImageUI:
                 # Auto-process and show background-removed previews
                 pipeline = StateManager.get_pipeline()
                 if pipeline is not None:
-                    st.markdown("**Background Removed (Auto):**")
+                    # Use current resize dimensions if set, otherwise use default
+                    current_width = st.session_state.get("resize_width", 518)
+                    current_height = st.session_state.get("resize_height", 518)
+                    target_size = (current_width, current_height)
+
+                    st.markdown(f"**Background Removed (Auto) - {target_size[0]}×{target_size[1]}:**")
                     with torch.no_grad(), torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
                         for i, uploaded_file in enumerate(multi_uploaded_files):
                             image = Image.open(uploaded_file)
-                            processed_image = pipeline.preprocess_image(image)
+                            processed_image = pipeline.preprocess_image(image, target_size)
                             st.image(processed_image, caption=f"Processed {i+1}", use_container_width=True)
                 else:
                     st.info("Background removal preview will be shown after pipeline loads")
