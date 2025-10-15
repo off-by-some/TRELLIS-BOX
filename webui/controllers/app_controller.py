@@ -11,7 +11,8 @@ from PIL import Image
 from .memory_controller import MemoryController
 from .generation_controller import GenerationController
 from library.models import GenerationParams, ExportParams
-from webui.initialize_pipeline import load_pipeline, reduce_memory_usage
+from webui.initialize_pipeline import load_pipeline
+from library.memory_utils import reduce_memory_usage
 
 
 class AppController:

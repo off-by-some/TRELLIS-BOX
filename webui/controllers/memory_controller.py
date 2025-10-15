@@ -5,10 +5,11 @@ Handles memory cleanup and optimization without UI dependencies.
 
 import torch
 import gc
+import time
 from typing import Optional
 import os
 
-from webui.initialize_pipeline import reduce_memory_usage
+from library.memory_utils import reduce_memory_usage, cleanup_temp_files
 
 
 class MemoryController:
@@ -31,8 +32,6 @@ class MemoryController:
             max_age_hours: Maximum age of files to keep in hours
         """
         try:
-            import time
-            from webui.initialize_pipeline import cleanup_temp_files
             cleanup_temp_files(max_age_hours=max_age_hours)
         except Exception as e:
             print(f"Warning: Failed to cleanup temp files: {e}")
