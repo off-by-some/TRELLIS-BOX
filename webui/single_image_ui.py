@@ -14,7 +14,7 @@ from webui.state_manager import StateManager
 from webui.controllers import AppController
 from library.models import GenerationParams, ExportParams
 from webui.ui_components import show_video_preview, show_3d_model_viewer
-from webui.image_preview import image_preview
+from webui.ui_components import show_example_gallery
 
 
 class SingleImageUI:
@@ -383,7 +383,7 @@ class SingleImageUI:
             if img.endswith(('.png', '.jpg', '.jpeg'))
         ])
 
-        selected_example = image_preview(example_images, columns=4)
+        selected_example = show_example_gallery(example_images, columns=4)
         if selected_example:
             example_img = Image.open(selected_example)
             # Resize large images

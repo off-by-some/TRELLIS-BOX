@@ -10,7 +10,7 @@ from webui.controllers import AppController
 from webui.state_manager import StateManager
 from webui.single_image_ui import SingleImageUI
 from webui.multi_image_ui import MultiImageUI
-from webui.loading_screen import show_loading_screen, finalize_loading
+from webui.loading_screen import show_loading_screen, finalize_loading, capture_output
 
 
 class TrellisApp:
@@ -98,7 +98,9 @@ class TrellisApp:
             progress_bar.progress(10)
 
             try:
-                pipeline = self.controller.initialize_pipeline()
+                with capture_output(console_output):
+                    pipeline = self.controller.initialize_pipeline()
+
                 StateManager.set_pipeline(pipeline)
 
                 # Complete loading UI
