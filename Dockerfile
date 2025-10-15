@@ -207,6 +207,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Copy application code
 COPY trellis/ ./trellis/
 COPY extensions/ ./extensions/
+COPY library/ ./library/
 COPY assets/ ./assets/
 COPY app.py ./
 COPY webui/ ./webui/
