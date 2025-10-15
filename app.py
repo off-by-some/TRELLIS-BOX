@@ -856,18 +856,17 @@ class SingleImageUI:
         """Render the input column."""
         st.subheader("Input")
 
-        # Restore preserved data if main data is lost (happens after st.rerun or generation)
-        if st.session_state.get("single_image") is None and st.session_state.get("_preserved_single_image"):
-            # We can't restore file uploader state directly, but we can restore the StateManager image
-            StateManager.set_uploaded_image(st.session_state["_preserved_single_image"])
-
-        # File uploader
+        # File uploader - Streamlit manages its state automatically
         uploaded_file = st.file_uploader(
             "Upload Image",
             type=["png", "jpg", "jpeg"],
             key="single_image",
             label_visibility="visible"
         )
+        
+        # If uploader is empty but we have preserved data, restore the StateManager image
+        if not uploaded_file and st.session_state.get("_preserved_single_image"):
+            StateManager.set_uploaded_image(st.session_state["_preserved_single_image"])
         
         # Handle uploaded image
         if uploaded_file is not None:
@@ -1386,10 +1385,7 @@ class MultiImageUI:
         """Render the input column."""
         st.subheader("Input")
 
-        # Restore preserved data if main data is lost (happens after st.rerun or generation)
-        if st.session_state.get("multi_images") is None and st.session_state.get("_preserved_multi_images"):
-            st.session_state["multi_images"] = st.session_state["_preserved_multi_images"]
-
+        # File uploader widget - Streamlit manages its state automatically
         multi_uploaded_files = st.file_uploader(
             "Upload Images (2-4 images)",
             type=["png", "jpg", "jpeg"],
@@ -1397,6 +1393,10 @@ class MultiImageUI:
             key="multi_images",
             label_visibility="visible"
         )
+        
+        # If uploader is empty but we have preserved data, use that for display
+        if not multi_uploaded_files and st.session_state.get("_preserved_multi_images"):
+            multi_uploaded_files = st.session_state.get("_preserved_multi_images")
         
         if multi_uploaded_files:
             if len(multi_uploaded_files) < 2:
