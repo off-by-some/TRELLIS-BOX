@@ -104,8 +104,8 @@ class SingleImageUI:
             st.image(uploaded_image, use_container_width=True)
 
             # Auto-process and show final processed preview
-            pipeline = StateManager.get_pipeline()
-            if pipeline is not None:
+            pipeline = controller.get_pipeline()
+            if pipeline is not None and uploaded_image is not None:
                 current_width = StateManager.get_resize_width()
                 current_height = StateManager.get_resize_height()
                 target_size = (current_width, current_height)
@@ -118,16 +118,12 @@ class SingleImageUI:
                 )
 
                 if needs_regeneration:
-                    pipeline = StateManager.get_pipeline()
-                    if pipeline is not None:
-                        with st.spinner("Processing image..."):
-                            result = controller.process_image(uploaded_image, use_refinement)
-                            processed_image = result.processed_images
-                            StateManager.set_processed_preview(processed_image)
-                            st.session_state.processed_preview_size = target_size
-                            st.session_state.current_refinement_setting = use_refinement
-                    else:
-                        processed_image = None
+                    with st.spinner("Processing image..."):
+                        result = controller.process_image(uploaded_image, use_refinement)
+                        processed_image = result.processed_images
+                        StateManager.set_processed_preview(processed_image)
+                        st.session_state.processed_preview_size = target_size
+                        st.session_state.current_refinement_setting = use_refinement
 
                 if processed_image is not None:
                     preview_label = "**Processed Preview**"
@@ -137,8 +133,6 @@ class SingleImageUI:
                         preview_label += " *(background removed)*"
                     st.markdown(preview_label)
                     st.image(processed_image, use_container_width=True)
-                else:
-                    st.info("Processed preview will be shown after pipeline loads")
             else:
                 st.info("Processed preview will be shown after pipeline loads")
 
