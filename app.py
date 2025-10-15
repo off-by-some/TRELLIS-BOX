@@ -960,7 +960,6 @@ class SingleImageUI:
         """
         # Generate trial_id if not provided
         if trial_id is None:
-            import uuid
             trial_id = str(uuid.uuid4())
 
         # Check if we have any uploaded data (show options even with 1 image)
