@@ -1004,23 +1004,6 @@ class SingleImageUI:
                     optimal_slat = min(3.0 * guidance_multiplier, 10.0)
                 # For single view, keep defaults
 
-            # Guidance sliders (always shown, but with different defaults based on auto-adjust)
-            ss_strength = st.slider(
-                "Sparse Structure Guidance", 0.0, 15.0, optimal_ss, 0.1,
-                help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
-                key=ss_strength_key,
-                disabled=auto_adjust_guidance
-            )
-            slat_strength = st.slider(
-                "SLAT Guidance", 0.0, 10.0, optimal_slat, 0.1,
-                help="Higher values = stronger adherence to structured latent features",
-                key=slat_strength_key,
-                disabled=auto_adjust_guidance
-            )
-
-            if auto_adjust_guidance:
-                st.info(f"Guidance automatically optimized: SS {optimal_ss:.1f}, SLAT {optimal_slat:.1f}")
-
             # Resize dimensions for conditioning model
             st.markdown("**Resize Dimensions**")
             col1, col2 = st.columns(2)
@@ -1060,12 +1043,29 @@ class SingleImageUI:
             st.markdown("**Stage 1: Sparse Structure Generation**")
             ss_col1, ss_col2 = st.columns(2)
             with ss_col1:
+                ss_strength = st.slider(
+                    "Guidance Strength", 0.0, 15.0, optimal_ss, 0.1,
+                    help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
+                    key=ss_strength_key,
+                    disabled=auto_adjust_guidance
+                )
+            with ss_col2:
                 ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
 
             st.markdown("**Stage 2: Structured Latent Generation**")
             slat_col1, slat_col2 = st.columns(2)
             with slat_col1:
+                slat_strength = st.slider(
+                    "Guidance Strength", 0.0, 10.0, optimal_slat, 0.1,
+                    help="Higher values = stronger adherence to structured latent features",
+                    key=slat_strength_key,
+                    disabled=auto_adjust_guidance
+                )
+            with slat_col2:
                 slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
+
+            if auto_adjust_guidance:
+                st.info(f"Guidance automatically optimized: SS {optimal_ss:.1f}, SLAT {optimal_slat:.1f}")
 
         # GLB Export Settings (always shown when input is available)
         if has_input:
