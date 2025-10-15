@@ -685,14 +685,27 @@ class ModelGenerator:
             # Analyze contradiction for multi-view inputs
             contradiction = pipeline.analyze_contradiction(cond)
 
-        # Display contradiction score for multi-view inputs
-        if cond.get('multi_view', False):
+        # Check if auto-adjust guidance is enabled
+        auto_adjust_enabled = st.session_state.get(f"auto_adjust_{'multi' if cond.get('multi_view', False) else 'single'}", True)
+
+        # Display guidance information
+        if auto_adjust_enabled and cond.get('multi_view', False):
+            # Show contradiction analysis for multi-view auto-adjust
             if contradiction < 1.0:
-                st.success(f"Multi-view consistency: Good ({contradiction:.2f})")
+                st.success(f"Multi-view consistency: Good ({contradiction:.2f}) | Guidance auto-optimized")
             elif contradiction < 3.0:
-                st.warning(f"Multi-view consistency: Moderate ({contradiction:.2f})")
+                st.warning(f"Multi-view consistency: Moderate ({contradiction:.2f}) | Guidance auto-optimized")
             else:
-                st.error(f"Multi-view consistency: Poor ({contradiction:.2f})")
+                st.error(f"Multi-view consistency: Poor ({contradiction:.2f}) | Guidance auto-optimized")
+        elif auto_adjust_enabled:
+            # Single view with auto-adjust
+            st.info("Single-view generation | Guidance auto-optimized")
+        else:
+            # Manual guidance mode
+            guidance_display = "Manual guidance mode"
+            if cond.get('multi_view', False):
+                guidance_display += f" (contradiction: {contradiction:.2f})"
+            st.info(guidance_display)
         
         # Clean up images immediately
         del images
@@ -951,6 +964,32 @@ class SingleImageUI:
                     key=refinement_key
                 )
 
+                # Auto-adjust guidance based on input consistency
+                auto_adjust_guidance = st.checkbox(
+                    "Auto-adjust guidance based on input consistency",
+                    value=True,
+                    help="Automatically optimize guidance strength based on how consistent your input images are. Recommended for best results.",
+                    key=f"auto_adjust_{trial_id}"
+                )
+                # Store in session state for use in generation
+                st.session_state[f"auto_adjust_{trial_id}"] = auto_adjust_guidance
+
+                # Manual guidance sliders (only shown when auto-adjust is disabled)
+                if not auto_adjust_guidance:
+                    ss_strength = st.slider(
+                        "Sparse Structure Guidance", 0.0, 15.0, 7.5, 0.1,
+                        help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
+                        key=ss_strength_key
+                    )
+                    slat_strength = st.slider(
+                        "SLAT Guidance", 0.0, 10.0, 3.0, 0.1,
+                        help="Higher values = stronger adherence to structured latent features",
+                        key=slat_strength_key
+                    )
+                else:
+                    # Show current auto values (will be calculated later)
+                    st.info("Guidance strength will be automatically optimized based on your input consistency")
+
                 # Resize dimensions for conditioning model
                 st.markdown("**Resize Dimensions**")
                 col1, col2 = st.columns(2)
@@ -1039,20 +1078,34 @@ class SingleImageUI:
                                 use_refinement
                             )
                             
+                            # Calculate final guidance values based on auto-adjust setting
+                            if auto_adjust_enabled and cond.get('multi_view', False):
+                                # Multi-view auto-adjust: use contradiction-based values
+                                guidance_multiplier = 1.0 + (contradiction * 0.5)
+                                final_ss_strength = min(ss_guidance_strength * guidance_multiplier, 15.0)
+                                final_slat_strength = min(slat_guidance_strength * guidance_multiplier, 10.0)
+                            else:
+                                # Single-view or manual mode: use original values
+                                final_ss_strength = ss_guidance_strength
+                                final_slat_strength = slat_guidance_strength
+
                             params = GenerationParams(
                                 seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
                                 randomize_seed=randomize_seed,
-                                ss_guidance_strength=ss_guidance_strength,
+                                ss_guidance_strength=final_ss_strength,
                                 ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=slat_guidance_strength,
+                                slat_guidance_strength=final_slat_strength,
                                 slat_sampling_steps=slat_sampling_steps
                             )
-                            
+
+                            # For multi-view with auto-adjust, params already have adjusted values
+                            multiview_params = params
+
                             state, video_path = ModelGenerator.generate_from_multiple_images(
                                 trial_id,
                                 len(processed_images),
                                 batch_size,
-                                params
+                                multiview_params
                             )
                     else:
                         # Single-image generation
@@ -1067,12 +1120,23 @@ class SingleImageUI:
                                     use_refinement
                                 )
                             
+                            # Calculate final guidance values for single-view
+                            single_auto_adjust = st.session_state.get("auto_adjust_single", True)
+                            if single_auto_adjust:
+                                # Single-view auto-adjust: use default optimized values
+                                final_ss_strength = ss_guidance_strength  # Keep defaults for single-view
+                                final_slat_strength = slat_guidance_strength
+                            else:
+                                # Manual mode: use slider values
+                                final_ss_strength = ss_guidance_strength
+                                final_slat_strength = slat_guidance_strength
+
                             params = GenerationParams(
                                 seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
                                 randomize_seed=randomize_seed,
-                                ss_guidance_strength=ss_guidance_strength,
+                                ss_guidance_strength=final_ss_strength,
                                 ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=slat_guidance_strength,
+                                slat_guidance_strength=final_slat_strength,
                                 slat_sampling_steps=slat_sampling_steps
                             )
                             
