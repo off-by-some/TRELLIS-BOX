@@ -989,11 +989,65 @@ class SingleImageUI:
         if has_any_input:
             # Generation Settings - always visible so users can regenerate with new parameters
             st.subheader("⚙️ Generation Settings")
+            
+            # Quality preset selector
+            st.markdown("**Quality Preset**")
+            quality_presets = {
+                "Fast (Low Quality)": {
+                    "resize": 384,
+                    "ss_strength": 5.0,
+                    "ss_steps": 8,
+                    "slat_strength": 2.0,
+                    "slat_steps": 8,
+                    "refinement": False
+                },
+                "Balanced": {
+                    "resize": 518,
+                    "ss_strength": 7.5,
+                    "ss_steps": 12,
+                    "slat_strength": 3.0,
+                    "slat_steps": 12,
+                    "refinement": False
+                },
+                "High Quality (Recommended)": {
+                    "resize": 768,
+                    "ss_strength": 10.0,
+                    "ss_steps": 20,
+                    "slat_strength": 4.0,
+                    "slat_steps": 20,
+                    "refinement": True
+                },
+                "Maximum Quality (Slow)": {
+                    "resize": 1024,
+                    "ss_strength": 12.0,
+                    "ss_steps": 30,
+                    "slat_strength": 5.0,
+                    "slat_steps": 30,
+                    "refinement": True
+                }
+            }
+            
+            quality_preset = st.selectbox(
+                "Choose Quality Level",
+                options=list(quality_presets.keys()),
+                index=1,  # Default to "Balanced"
+                key=f"quality_preset_{trial_id}",
+                help="Higher quality = better details but slower generation. For complex characters, use High Quality or Maximum."
+            )
+            
+            preset_settings = quality_presets[quality_preset]
+            
+            # Show quality expectations
+            if quality_preset == "Fast (Low Quality)":
+                st.warning("⚠️ Fast mode produces blocky, low-detail models. Not recommended for complex characters.")
+            elif quality_preset == "High Quality (Recommended)" or quality_preset == "Maximum Quality (Slow)":
+                st.info("💡 **Tip**: For best results with detailed characters, provide 2-4 views from different angles in Multi-Image mode.")
+            
             seed = st.slider("Seed", 0, MAX_SEED, 0, 1, key=seed_key)
             randomize_seed = st.checkbox("Randomize Seed", value=True, key=randomize_key)
             use_refinement = st.checkbox(
                 "Image Refinement (SSD-1B)",
-                value=False,
+                value=preset_settings["refinement"],
                 help="Enhance input quality with SSD-1B - 50% less VRAM than SDXL (adds ~5-7s" + (" per image)" if is_multi_image else ")"),
                 key=refinement_key
             )
@@ -1019,65 +1073,66 @@ class SingleImageUI:
                     optimal_slat = min(3.0 * guidance_multiplier, 10.0)
                 # For single view, keep defaults
 
-            # Resize dimensions for conditioning model
-            st.markdown("**Resize Dimensions**")
-            col1, col2 = st.columns(2)
-            with col1:
-                resize_width = st.number_input(
-                    "Width",
-                    min_value=256,
-                    max_value=1024,
-                    value=518,
-                    step=64,
-                    help="Width to resize images to for conditioning model",
-                    key=f"resize_width_{trial_id}"
-                )
-                # Store in session state for use in generation
-                st.session_state["resize_width"] = resize_width
-            with col2:
-                resize_height = st.number_input(
-                    "Height",
-                    min_value=256,
-                    max_value=1024,
-                    value=518,
-                    step=64,
-                    help="Height to resize images to for conditioning model",
-                    key=f"resize_height_{trial_id}"
-                )
-                # Store in session state for use in generation
-                st.session_state["resize_height"] = resize_height
+            # Resize dimensions for conditioning model (set by preset)
+            with st.expander("Advanced: Override Preset Settings", expanded=False):
+                st.markdown("**Resize Dimensions**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    resize_width = st.number_input(
+                        "Width",
+                        min_value=256,
+                        max_value=1024,
+                        value=preset_settings["resize"],
+                        step=64,
+                        help="Width to resize images to for conditioning model",
+                        key=f"resize_width_{trial_id}"
+                    )
+                    # Store in session state for use in generation
+                    st.session_state["resize_width"] = resize_width
+                with col2:
+                    resize_height = st.number_input(
+                        "Height",
+                        min_value=256,
+                        max_value=1024,
+                        value=preset_settings["resize"],
+                        step=64,
+                        help="Height to resize images to for conditioning model",
+                        key=f"resize_height_{trial_id}"
+                    )
+                    # Store in session state for use in generation
+                    st.session_state["resize_height"] = resize_height
 
-            # Batch size for multi-image only
-            if is_multi_image and batch_size_key:
-                batch_size = st.slider(
-                    "Batch Size", 1, 4, 2, 1,
-                    help="Number of images processed at once (lower = less memory)",
-                    key=batch_size_key
-                )
+                # Batch size for multi-image only
+                if is_multi_image and batch_size_key:
+                    batch_size = st.slider(
+                        "Batch Size", 1, 4, 2, 1,
+                        help="Number of images processed at once (lower = less memory)",
+                        key=batch_size_key
+                    )
 
-            st.markdown("**Stage 1: Sparse Structure Generation**")
-            ss_col1, ss_col2 = st.columns(2)
-            with ss_col1:
-                ss_strength = st.slider(
-                    "Guidance Strength", 0.0, 15.0, optimal_ss, 0.1,
-                    help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
-                    key=ss_strength_key,
-                    disabled=auto_adjust_guidance
-                )
-            with ss_col2:
-                ss_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=ss_steps_key)
+                st.markdown("**Stage 1: Sparse Structure Generation**")
+                ss_col1, ss_col2 = st.columns(2)
+                with ss_col1:
+                    ss_strength = st.slider(
+                        "Guidance Strength", 0.0, 15.0, preset_settings["ss_strength"] if not auto_adjust_guidance else optimal_ss, 0.1,
+                        help="Higher values = stronger adherence to sparse structure, but may reduce creativity",
+                        key=ss_strength_key,
+                        disabled=auto_adjust_guidance
+                    )
+                with ss_col2:
+                    ss_sampling_steps = st.slider("Sampling Steps", 1, 50, preset_settings["ss_steps"], 1, key=ss_steps_key)
 
-            st.markdown("**Stage 2: Structured Latent Generation**")
-            slat_col1, slat_col2 = st.columns(2)
-            with slat_col1:
-                slat_strength = st.slider(
-                    "Guidance Strength", 0.0, 10.0, optimal_slat, 0.1,
-                    help="Higher values = stronger adherence to structured latent features",
-                    key=slat_strength_key,
-                    disabled=auto_adjust_guidance
-                )
-            with slat_col2:
-                slat_sampling_steps = st.slider("Sampling Steps", 1, 50, 12, 1, key=slat_steps_key)
+                st.markdown("**Stage 2: Structured Latent Generation**")
+                slat_col1, slat_col2 = st.columns(2)
+                with slat_col1:
+                    slat_strength = st.slider(
+                        "Guidance Strength", 0.0, 10.0, preset_settings["slat_strength"] if not auto_adjust_guidance else optimal_slat, 0.1,
+                        help="Higher values = stronger adherence to structured latent features",
+                        key=slat_strength_key,
+                        disabled=auto_adjust_guidance
+                    )
+                with slat_col2:
+                    slat_sampling_steps = st.slider("Sampling Steps", 1, 50, preset_settings["slat_steps"], 1, key=slat_steps_key)
 
             if auto_adjust_guidance:
                 st.info(f"Guidance automatically optimized: SS {optimal_ss:.1f}, SLAT {optimal_slat:.1f}")
