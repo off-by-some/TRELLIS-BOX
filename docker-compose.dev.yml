@@ -2,6 +2,9 @@ version: '3.8'
 
 services:
   trellis:
+    ports:
+      # Explicitly bind to all interfaces for remote access
+      - "0.0.0.0:${HOST_PORT:-8501}:${APP_PORT:-8501}"
     volumes:
       # Mount source code for hot reloading in development
       # Hot-reloadable: UI code and main app
@@ -14,5 +17,9 @@ services:
     environment:
       # Enable hot reloading and better development experience
       - STREAMLIT_SERVER_HEADLESS=false
+      # Explicitly bind Streamlit to all interfaces
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
     stdin_open: true
     tty: true
+    networks:
+      - default
