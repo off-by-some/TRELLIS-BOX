@@ -81,10 +81,6 @@ class ModelState:
     trial_id: str
 
 
-# ============================================================================
-# TODO 1: State Manager - Handles all session state management
-# ============================================================================
-
 class StateManager:
     """Manages Streamlit session state with type safety."""
     
@@ -211,10 +207,6 @@ class StateManager:
         """Set the generation state."""
         st.session_state[StateManager.IS_GENERATING] = generating
 
-
-# ============================================================================
-# TODO 2: Memory Manager - Handles memory cleanup and optimization
-# ============================================================================
 
 class MemoryManager:
     """Manages memory cleanup and optimization."""
