@@ -28,7 +28,7 @@ The refinement happens automatically during preprocessing.
 
 ```python
 from trellis.pipelines import TrellisImageTo3DPipeline
-from trellis.pipelines.image_refiner import ImageRefiner
+from library.image_refiner import ImageRefiner
 from PIL import Image
 
 # Load pipeline and refiner

@@ -132,6 +132,7 @@ class ImageRefiner:
         best_idx = similarity.argmax().item()
         base_prompt = candidate_prompts[best_idx]
 
+        
         # Combine with quality enhancement terms
         return f"{base_prompt}, high quality, detailed, sharp focus"
 
@@ -174,6 +175,7 @@ class ImageRefiner:
         # Generate CLIP-based prompt if none provided
         if prompt is None:
             prompt = self._generate_clip_prompt(image)
+            print(f"Generated CLIP-based prompt: {prompt}")
 
         # Run refinement
         with torch.inference_mode():

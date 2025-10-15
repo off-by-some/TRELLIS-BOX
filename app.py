@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from easydict import EasyDict as edict
 from PIL import Image
 from trellis.pipelines import TrellisImageTo3DPipeline
-from trellis.pipelines.image_refiner import ImageRefiner
+from library.image_refiner import ImageRefiner
 from trellis.representations import Gaussian, MeshExtractResult
 from trellis.utils import render_utils, postprocessing_utils
 
