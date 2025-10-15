@@ -4,13 +4,13 @@ services:
   trellis:
     volumes:
       # Mount source code for hot reloading in development
-      # Only mount Python source files, not compiled extensions
+      # Hot-reloadable: UI code and main app
       - ./app.py:/app/app.py
-      - ./trellis:/app/trellis
       - ./webui:/app/webui
       - ./docs:/app/docs
       - ./assets:/app/assets
-      # DO NOT mount extensions/ - contains compiled C++ code
+      # NOT mounted: trellis/ (installed package - rebuild for changes)
+      # NOT mounted: extensions/ (compiled C++ code)
     environment:
       # Enable hot reloading and better development experience
       - STREAMLIT_SERVER_HEADLESS=false

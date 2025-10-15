@@ -25,7 +25,7 @@ $ ./trellis.sh run
 ```bash
 $ ./trellis.sh run --dev
 ```
-This mounts your source code into the container, enabling automatic code reloading when you make changes. Perfect for development and debugging!
+This enables hot reloading for UI and app changes. Perfect for interface development and debugging Streamlit issues. Note: Core algorithm changes require rebuilding the image.
 
 Or if you prefer, pull and run the pre-built Docker image:
 ```bash

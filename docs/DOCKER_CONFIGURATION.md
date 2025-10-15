@@ -247,30 +247,34 @@ DEV=true ./scripts/run.sh
 ```
 
 **What gets mounted in dev mode:**
-- `app.py` - Main Streamlit application
-- `trellis/` - Core TRELLIS pipeline code
-- `webui/` - Web UI components
-- `docs/` - Documentation files
-- `assets/` - Static assets and examples
-- `extensions/` - Custom extensions (nvdiffrast, etc.)
+- `app.py` - Main Streamlit application ✅ **Hot-reloadable**
+- `webui/` - Web UI components ✅ **Hot-reloadable**
+- `docs/` - Documentation files ✅ **Hot-reloadable**
+- `assets/` - Static assets and examples ✅ **Hot-reloadable**
+
+**What does NOT get mounted:**
+- `trellis/` - Core pipeline code (installed as Python package - rebuild required)
+- `extensions/` - Compiled C++ extensions (rebuild required)
 
 **Benefits:**
-- ✅ **Hot reloading**: Changes to Python files are reflected immediately
-- ✅ **Faster iteration**: No need to rebuild Docker image for code changes
-- ✅ **Debug friendly**: Direct access to source code for debugging
-- ✅ **Persistent caches**: Models and dependencies remain cached
+- ✅ **Hot reloading** for UI and app changes
+- ✅ **Faster iteration** for interface development
+- ✅ **Debug friendly** for web UI issues
+- ✅ **Persistent caches** for models and dependencies
 
 **When to use dev mode:**
-- Active development and testing
-- Debugging application issues
-- UI/UX improvements
-- Adding new features
+- 🎨 **UI/UX development** - webui/ changes
+- 🔧 **App logic changes** - app.py modifications
+- 📊 **Interface testing** - layout and component changes
+- 🐛 **Debugging UI issues** - Streamlit-specific problems
 
 **When to use production mode:**
-- Deployment to production servers
-- When code changes are infrequent
-- Maximum performance optimization
-- Minimal container size requirements
+- ⚙️ **Core algorithm changes** - trellis/ package updates
+- 🔧 **Extension modifications** - C++ code changes
+- 🚀 **Performance optimization** - production deployment
+- 📦 **Minimal container size** - distribution builds
+
+**Note:** For changes to `trellis/` or `extensions/`, rebuild the image even in dev mode.
 
 ### Use Case 7: Custom Cache Directories
 
