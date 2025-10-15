@@ -2,6 +2,14 @@ version: '3.8'
 
 services:
   trellis:
+    runtime: nvidia  # Explicitly use NVIDIA runtime
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-all}
+              capabilities: [gpu]
     ports:
       # Explicitly bind to all interfaces for remote access
       - "0.0.0.0:${HOST_PORT:-8501}:${APP_PORT:-8501}"
