@@ -17,8 +17,51 @@ This repository hosts a containerized implementation of Microsoft's [TRELLIS](ht
 
 To get up and running, you can build the repository to build from source:
 ```bash
-$ git clone https://github.com/off-by-some/TRELLIS-BOX && cd TRELLIS-BOX
-$ ./trellis.sh run
+# Clone and run with Docker
+$ git clone https://github.com/off-by-some/TRELLIS-BOX && \
+            cd TRELLIS-BOX && ./trellis.sh run # Add --dev for hot reloading
+```
+
+Or if you prefer, pull and run the pre-built Docker image:
+```
+$ docker run --gpus all -it -p 8501:8501 \
+                        -v ~/.cache/trellis-box:/root/.cache \
+                        -v ~/.cache/rembg:/root/.u2net \
+                        -v $(pwd)/outputs:/tmp/Trellis-demo \
+         cassidybridges/trellis-box:latest
+```
+
+Then simply open http://localhost:8501 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations. 
+
+
+## CLI Reference
+Here's the current command reference for [trellis.sh](./trellis.sh):
+```text
+🚀 TRELLIS Docker Manager
+
+Usage: ./trellis.sh <command> [options]
+
+Commands:
+  run      - Start TRELLIS (builds image, checks GPU, etc.)
+  dev      - Quick development mode (requires docker-compose)
+  restart  - Restart a stopped TRELLIS container
+  stop     - Stop the running TRELLIS container
+  status   - Show TRELLIS status and system info
+  build    - Build the Docker image only
+  check    - Check GPU memory availability
+
+Options:
+  --dev, -v    Enable development mode with hot reloading
+  --diagnostics, -d  Run diagnostics (run command only)
+
+Examples:
+  ./trellis.sh run                    # Start TRELLIS with full setup
+  ./trellis.sh run --dev              # Start in development mode (hot reloading)
+  ./trellis.sh dev                    # Quick dev mode (no GPU checks)
+  ./trellis.sh status                 # Check current status
+  ./trellis.sh stop                   # Stop TRELLIS
+  ./trellis.sh run --diagnostics      # Run GPU diagnostics
+
 ```
 
 **Development Mode (with hot reloading):**
@@ -27,15 +70,7 @@ $ ./trellis.sh run --dev
 ```
 This enables hot reloading for UI and app changes. Perfect for interface development and debugging Streamlit issues. Note: Core algorithm changes require rebuilding the image.
 
-Or if you prefer, pull and run the pre-built Docker image:
-```bash
-$ docker run --gpus all -it -p 8501:8501 \
-              -v ~/.cache/trellis-box:/root/.cache \
-              -v ~/.cache/rembg:/root/.u2net \
-              -v $(pwd)/outputs:/tmp/Trellis-demo \
-            cassidybridges/trellis-box:latest
-```
-Then simply open http://localhost:8501 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations. 
+
 
 ## Use Cases
 
@@ -66,13 +101,28 @@ Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimi
 
 ### Docker Setup
 1. **Install NVIDIA Container Toolkit** (Linux):
+   
+   If you're running Arch/Manjaro:
    ```bash
-   # Ubuntu/Debian
-   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-   sudo apt-get update && sudo apt-get install -y nvidia-docker2
-   sudo systemctl restart docker
+   $ sudo pacman -Syu nvidia-container-toolkit
+
+   ```
+
+   Ubuntu / Debian,
+   ```bash
+   # First add the NVIDIA container toolkit repository
+   $ distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
+   $ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+      sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+   # This ensures the packages you install are from NVIDIA’s repository, properly signed. 
+   $ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+                sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] \
+                https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+   # Update & install the toolkit
+   $ sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+
    ```
 
 2. **Verify GPU access**:

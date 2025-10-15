@@ -2,7 +2,9 @@ version: '3.8'
 
 services:
   trellis:
-    runtime: nvidia  # Explicitly use NVIDIA runtime
+    # Use same GPU config as working docker-compose.yml
+    environment:
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
     deploy:
       resources:
         reservations:
@@ -14,12 +16,11 @@ services:
       # Explicitly bind to all interfaces for remote access
       - "0.0.0.0:${HOST_PORT:-8501}:${APP_PORT:-8501}"
     volumes:
-      # Mount source code for hot reloading in development
-      # Hot-reloadable: UI code and main app
-      - ./app.py:/app/app.py
-      - ./webui:/app/webui
-      - ./docs:/app/docs
-      - ./assets:/app/assets
+      # Mount only essential files to avoid GPU conflicts
+      # Critical for hot reloading: app.py and webui/
+      - ./app.py:/app/app.py:z
+      - ./webui:/app/webui:z
+      # Skip docs/ and assets/ - not essential for development
       # NOT mounted: trellis/ (installed package - rebuild for changes)
       # NOT mounted: extensions/ (compiled C++ code)
     environment:
