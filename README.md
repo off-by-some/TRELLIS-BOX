@@ -211,6 +211,25 @@ Upload one image to generate a 3D model. Background removal is applied automatic
 ### Multi-View Generation
 Upload 2-4 images from different angles. The pipeline cycles through images during sampling for improved conditioning.
 
+## Enhanced Features
+
+### Image Processing
+- Optional image refinement using SSD-1B after background removal (runs on CPU to avoid GPU memory conflicts)
+- Automatic image resizing with multiple preset resolutions (392px to 1022px)
+- Real-time preview of processed images before generation
+
+### Quality Presets
+- Fast (Low Quality): Quick generation with reduced detail
+- Balanced: Standard quality settings for most use cases
+- High Quality (Recommended): Enhanced quality for detailed objects
+- Maximum Quality (Slow): Highest quality with maximum detail
+
+### GLB Export Settings
+- Mesh quality presets: Low, Medium, High, Premium
+- Configurable mesh simplification ratios (0.8-0.99)
+- Adjustable texture sizes (256px to 4096px)
+- Customizable hole filling resolution and view counts
+
 ## Configuration
 
 ### Configuration

@@ -27,7 +27,7 @@ class ImageRefiner:
     Args:
         model_id: Hugging Face model ID for the refiner
         device: Device to run the model on ('cuda' or 'cpu')
-        use_fp16: Whether to use half precision for memory efficiency
+        use_fp16: Whether to use half precision for memory efficiency (automatically disabled on CPU)
     """
     
     def __init__(
@@ -37,20 +37,23 @@ class ImageRefiner:
         use_fp16: bool = True,
     ):
         self.device = device
-        self.use_fp16 = use_fp16
-        
+        # Force fp32 on CPU to avoid CUDA requirements
+        self.use_fp16 = use_fp16 and device == "cuda"
+
         # Load refiner pipeline (SSD-1B uses SDXL architecture)
-        dtype = torch.float16 if use_fp16 else torch.float32
+        dtype = torch.float16 if self.use_fp16 else torch.float32
         self.pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
             model_id,
             torch_dtype=dtype,
-            variant="fp16" if use_fp16 else None,
+            variant="fp16" if self.use_fp16 else None,
         )
         self.pipe.to(device)
         
-        # Memory optimizations for consumer GPUs
+        # Memory optimizations
         self.pipe.enable_attention_slicing()
-        if hasattr(self.pipe, 'enable_model_cpu_offload'):
+
+        # Only enable CPU offloading when using CUDA
+        if device == "cuda" and hasattr(self.pipe, 'enable_model_cpu_offload'):
             self.pipe.enable_model_cpu_offload()
     
     def refine(

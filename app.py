@@ -458,10 +458,6 @@ class VideoRenderer:
         del combined_frames
 
 
-# ============================================================================
-# TODO 5: Model Generator - Handles 3D model generation logic
-# ============================================================================
-
 class ModelGenerator:
     """Handles 3D model generation from images."""
     
@@ -767,10 +763,6 @@ class ModelGenerator:
         
         return state, video_path
 
-
-# ============================================================================
-# TODO 6: GLB Exporter - Handles GLB file extraction
-# ============================================================================
 
 class GLBExporter:
     """Handles GLB file export operations."""
@@ -1822,10 +1814,6 @@ class TrellisApp:
         with tab2:
             MultiImageUI.render()
 
-
-# ============================================================================
-# TODO 10: Entry Point
-# ============================================================================
 
 if __name__ == "__main__":
     app = TrellisApp()
