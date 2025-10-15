@@ -5,7 +5,7 @@ Pure business logic with no UI or state management dependencies.
 
 import uuid
 import torch
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 from PIL import Image
 
 from library.image_refiner import ImageRefiner
