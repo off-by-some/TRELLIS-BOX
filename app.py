@@ -870,24 +870,62 @@ class SingleImageUI:
         # Show uploaded image
         uploaded_image = StateManager.get_uploaded_image()
         if uploaded_image is not None:
+            # Processing options dropdown
+            processing_option = st.selectbox(
+                "Image Processing Options",
+                options=["None", "Apply Image Refinement", "Resize Dimensions"],
+                index=0,
+                help="Choose how to process the uploaded image before 3D generation",
+                key="processing_option_single"
+            )
+
             st.markdown("**Uploaded Image:**")
             st.image(uploaded_image, use_container_width=True)
 
-            # Image refinement checkbox
-            use_refinement = st.checkbox(
-                "Apply Image Refinement (SSD-1B)",
-                value=False,  # Default to False to avoid confusion
-                help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s processing time.",
-                key="refinement_single_input"
-            )
+            # Image refinement options
+            use_refinement = False
+            if processing_option == "Apply Image Refinement":
+                use_refinement = st.checkbox(
+                    "Apply Image Refinement (SSD-1B)",
+                    value=True,  # Default to True when selected
+                    help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s processing time.",
+                    key="refinement_single_input"
+                )
+
+            # Resize dimensions options
+            resize_width = 518
+            resize_height = 518
+            if processing_option == "Resize Dimensions":
+                st.markdown("**Resize Dimensions** (must be multiples of 14)")
+
+                # Valid resize options (multiples of 14)
+                valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    resize_width = st.selectbox(
+                        "Width",
+                        options=valid_sizes,
+                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                        key=f"resize_width_single",
+                        help="Width to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
+                    )
+                with col2:
+                    resize_height = st.selectbox(
+                        "Height",
+                        options=valid_sizes,
+                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                        key=f"resize_height_single",
+                        help="Height to resize images to for conditioning model (must be multiple of 14)",
+                        format_func=lambda x: f"{x}px"
+                    )
 
             # Auto-process and show final processed preview
             pipeline = StateManager.get_pipeline()
             if pipeline is not None:
-                # Use current resize dimensions if set, otherwise use default
-                current_width = st.session_state.get("resize_width", 518)
-                current_height = st.session_state.get("resize_height", 518)
-                target_size = (current_width, current_height)
+                # Use resize dimensions from dropdown selection, or default
+                target_size = (resize_width, resize_height)
 
                 # Check if we need to regenerate preview due to size change or refinement setting change
                 current_preview_size = st.session_state.get("processed_preview_size")
@@ -1563,26 +1601,64 @@ class MultiImageUI:
             
             # Display uploaded images (same style as single-image)
             if len(multi_uploaded_files) >= 2:
+                # Processing options dropdown
+                processing_option = st.selectbox(
+                    "Image Processing Options",
+                    options=["None", "Apply Image Refinement", "Resize Dimensions"],
+                    index=0,
+                    help="Choose how to process the uploaded images before 3D generation",
+                    key="processing_option_multi"
+                )
+
                 st.markdown("**Uploaded Images:**")
                 for i, uploaded_file in enumerate(multi_uploaded_files):
                     image = Image.open(uploaded_file)
                     st.image(image, caption=f"Image {i+1}", use_container_width=True)
 
-                # Image refinement checkbox
-                use_refinement = st.checkbox(
-                    "Apply Image Refinement (SSD-1B)",
-                    value=False,  # Default to False to avoid confusion
-                    help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s per image.",
-                    key="refinement_multi_input"
-                )
+                # Image refinement options
+                use_refinement = False
+                if processing_option == "Apply Image Refinement":
+                    use_refinement = st.checkbox(
+                        "Apply Image Refinement (SSD-1B)",
+                        value=True,  # Default to True when selected
+                        help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s per image.",
+                        key="refinement_multi_input"
+                    )
+
+                # Resize dimensions options
+                resize_width = 518
+                resize_height = 518
+                if processing_option == "Resize Dimensions":
+                    st.markdown("**Resize Dimensions** (must be multiples of 14)")
+
+                    # Valid resize options (multiples of 14)
+                    valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        resize_width = st.selectbox(
+                            "Width",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key=f"resize_width_multi",
+                            help="Width to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
+                    with col2:
+                        resize_height = st.selectbox(
+                            "Height",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key=f"resize_height_multi",
+                            help="Height to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
 
                 # Auto-process and show final processed previews
                 pipeline = StateManager.get_pipeline()
                 if pipeline is not None:
-                    # Use current resize dimensions if set, otherwise use default
-                    current_width = st.session_state.get("resize_width", 518)
-                    current_height = st.session_state.get("resize_height", 518)
-                    target_size = (current_width, current_height)
+                    # Use resize dimensions from dropdown selection, or default
+                    target_size = (resize_width, resize_height)
 
                     preview_label = f"**Processed Previews - {target_size[0]}×{target_size[1]}**"
                     if use_refinement:
