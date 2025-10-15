@@ -5,7 +5,7 @@ Pure business logic with no UI or state management dependencies.
 
 import uuid
 import torch
-from typing import List, Tuple, Optional, Any
+from typing import List, Optional, Any
 from PIL import Image
 
 from library.image_refiner import ImageRefiner
@@ -15,13 +15,15 @@ from library.models import ProcessingResult
 class ImageProcessor:
     """Handles image preprocessing and refinement operations."""
 
-    def __init__(self, pipeline: Optional[Any] = None):
+    def __init__(self, pipeline: Optional[Any] = None, tmp_dir: str = "/tmp/Trellis-demo"):
         """Initialize the image processor.
 
         Args:
             pipeline: TRELLIS pipeline for image preprocessing
+            tmp_dir: Directory for temporary files
         """
         self.pipeline = pipeline
+        self.tmp_dir = tmp_dir
         self.refiner: Optional[ImageRefiner] = None
 
     def set_pipeline(self, pipeline: Any) -> None:
@@ -65,7 +67,7 @@ class ImageProcessor:
         )
         return refined_image
 
-    def preprocess_single_image(self, image: Image.Image, use_refinement: bool = False, tmp_dir: str = "/tmp/Trellis-demo") -> ProcessingResult:
+    def preprocess_single_image(self, image: Image.Image, use_refinement: bool = False) -> ProcessingResult:
         """
         Preprocess a single input image with memory-efficient operations.
         Background removal happens first, then refinement if requested.
@@ -73,7 +75,6 @@ class ImageProcessor:
         Args:
             image: The input image
             use_refinement: Whether to apply SSD-1B refinement after background removal
-            tmp_dir: Directory to save processed images
 
         Returns:
             ProcessingResult with trial_id and processed image
@@ -94,11 +95,11 @@ class ImageProcessor:
             torch.cuda.empty_cache()
 
         # High-quality image saving - no compression artifacts
-        processed_image.save(f"{tmp_dir}/{trial_id}.png", quality=100, subsampling=0)
+        processed_image.save(f"{self.tmp_dir}/{trial_id}.png", quality=100, subsampling=0)
 
         return ProcessingResult(trial_id=trial_id, processed_images=processed_image)
 
-    def preprocess_multiple_images(self, images: List[Image.Image], use_refinement: bool = False, tmp_dir: str = "/tmp/Trellis-demo") -> ProcessingResult:
+    def preprocess_multiple_images(self, images: List[Image.Image], use_refinement: bool = False) -> ProcessingResult:
         """
         Preprocess multiple input images for multi-view 3D reconstruction.
         Background removal happens first, then refinement if requested.
@@ -107,7 +108,6 @@ class ImageProcessor:
         Args:
             images: List of input images
             use_refinement: Whether to apply SSD-1B refinement after background removal
-            tmp_dir: Directory to save processed images
 
         Returns:
             ProcessingResult with trial_id and list of processed images
@@ -126,7 +126,7 @@ class ImageProcessor:
                 processed_img = self.apply_refinement(processed_img)
 
             # High-quality image saving for multi-view - no compression artifacts
-            processed_img.save(f"{tmp_dir}/{trial_id}_{i}.png", quality=100, subsampling=0)
+            processed_img.save(f"{self.tmp_dir}/{trial_id}_{i}.png", quality=100, subsampling=0)
             processed_images.append(processed_img)
 
             # Force cleanup of intermediate objects
