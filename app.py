@@ -1142,7 +1142,7 @@ class SingleImageUI:
                 texture_size = st.selectbox(
                     "Texture Size",
                     options=texture_size_options,
-                    index=texture_size_options.index(current_texture_size),
+                    index=texture_size_options.index(current_texture_size) if current_texture_size in texture_size_options else 0,
                     key=texture_key,
                     help="Resolution of the texture (must be power of 2 for mip-mapping). Higher = sharper textures but larger file.",
                     format_func=lambda x: f"{x}px"
@@ -1158,7 +1158,7 @@ class SingleImageUI:
                 fill_holes_resolution = st.selectbox(
                     "Hole Fill Resolution",
                     options=fill_res_options,
-                    index=fill_res_options.index(current_fill_res),
+                    index=fill_res_options.index(current_fill_res) if current_fill_res in fill_res_options else 0,
                     key=f"fill_res_{trial_id}",
                     help="Resolution used for hole filling algorithm (power of 2 recommended).",
                     format_func=lambda x: f"{x}px"
@@ -1202,130 +1202,130 @@ class SingleImageUI:
                     if has_generated and not is_multi_image:
                         st.session_state.processed_preview = None
 
-                    if is_multi_image:
-                        # Multi-image generation
-                        with st.spinner("Processing multiple images..."):
-                            images = [Image.open(f) for f in uploaded_data]
-                            
-                            if use_refinement:
-                                st.info("Applying image refinement to all images...")
-                                images = [ImageProcessor.apply_refinement(img) for img in images]
-                            
-                            trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
-                                images,
-                                use_refinement
-                            )
-                            
-                            # Get analysis results and UI values from session state
-                            cond = st.session_state.get('generation_cond')
-                            contradiction = st.session_state.get('generation_contradiction', 0.0)
-                            auto_adjust_enabled = st.session_state.get("auto_adjust_multi", False)
+                    try:
+                        if is_multi_image:
+                            # Multi-image generation
+                            with st.spinner("Processing multiple images..."):
+                                images = [Image.open(f) for f in uploaded_data]
 
-                            # Determine guidance values based on auto-adjust setting
-                            if auto_adjust_enabled and cond and cond.get('multi_view', False):
-                                # Use optimal values calculated from contradiction
-                                guidance_multiplier = 1.0 + (contradiction * 0.5)
-                                ss_guidance_strength = min(7.5 * guidance_multiplier, 15.0)
-                                slat_guidance_strength = min(3.0 * guidance_multiplier, 10.0)
-                            else:
-                                # Use slider values from session state
-                                ss_guidance_strength = st.session_state.get("ss_strength_multi", 7.5)
-                                slat_guidance_strength = st.session_state.get("slat_strength_multi", 3.0)
-
-                            # Get sampling steps (always from sliders)
-                            ss_sampling_steps = st.session_state.get("ss_steps_multi", 12)
-                            slat_sampling_steps = st.session_state.get("slat_steps_multi", 12)
-
-                            params = GenerationParams(
-                                seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
-                                randomize_seed=randomize_seed,
-                                ss_guidance_strength=ss_guidance_strength,
-                                ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=slat_guidance_strength,
-                                slat_sampling_steps=slat_sampling_steps
-                            )
-
-                            multiview_params = params
-
-                            state, video_path = ModelGenerator.generate_from_multiple_images(
-                                trial_id,
-                                len(processed_images),
-                                batch_size,
-                                multiview_params
-                            )
-                    else:
-                        # Single-image generation
-                        with st.spinner("Generating 3D model..."):
-                            if st.session_state.get('processed_preview') is not None:
-                                processed_image = st.session_state.processed_preview
-                                trial_id = str(uuid.uuid4())
-                                processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
-                            else:
-                                trial_id, processed_image = ImageProcessor.preprocess_single_image(
-                                    uploaded_data,
+                                if use_refinement:
+                                    st.info("Applying image refinement to all images...")
+                                    images = [ImageProcessor.apply_refinement(img) for img in images]
+                                trial_id, processed_images = ImageProcessor.preprocess_multiple_images(
+                                    images,
                                     use_refinement
                                 )
 
-                            # Get auto-adjust setting for single-view
-                            auto_adjust_enabled = st.session_state.get("auto_adjust_single", False)
+                                # Get analysis results and UI values from session state
+                                cond = st.session_state.get('generation_cond')
+                                contradiction = st.session_state.get('generation_contradiction', 0.0)
+                                auto_adjust_enabled = st.session_state.get("auto_adjust_multi", False)
 
-                            # For single-view, auto-adjust doesn't change guidance (no contradiction to measure)
-                            # Always use slider values
-                            ss_guidance_strength = st.session_state.get("ss_strength_single", 7.5)
-                            slat_guidance_strength = st.session_state.get("slat_strength_single", 3.0)
-                            ss_sampling_steps = st.session_state.get("ss_steps_single", 12)
-                            slat_sampling_steps = st.session_state.get("slat_steps_single", 12)
+                                # Determine guidance values based on auto-adjust setting
+                                if auto_adjust_enabled and cond and cond.get('multi_view', False):
+                                    # Use optimal values calculated from contradiction
+                                    guidance_multiplier = 1.0 + (contradiction * 0.5)
+                                    ss_guidance_strength = min(7.5 * guidance_multiplier, 15.0)
+                                    slat_guidance_strength = min(3.0 * guidance_multiplier, 10.0)
+                                else:
+                                    # Use slider values from session state
+                                    ss_guidance_strength = st.session_state.get("ss_strength_multi", 7.5)
+                                    slat_guidance_strength = st.session_state.get("slat_strength_multi", 3.0)
 
-                            params = GenerationParams(
-                                seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
-                                randomize_seed=randomize_seed,
-                                ss_guidance_strength=ss_guidance_strength,
-                                ss_sampling_steps=ss_sampling_steps,
-                                slat_guidance_strength=slat_guidance_strength,
-                                slat_sampling_steps=slat_sampling_steps
+                                # Get sampling steps (always from sliders)
+                                ss_sampling_steps = st.session_state.get("ss_steps_multi", 12)
+                                slat_sampling_steps = st.session_state.get("slat_steps_multi", 12)
+
+                                params = GenerationParams(
+                                    seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
+                                    randomize_seed=randomize_seed,
+                                    ss_guidance_strength=ss_guidance_strength,
+                                    ss_sampling_steps=ss_sampling_steps,
+                                    slat_guidance_strength=slat_guidance_strength,
+                                    slat_sampling_steps=slat_sampling_steps
+                                )
+
+                                multiview_params = params
+
+                                state, video_path = ModelGenerator.generate_from_multiple_images(
+                                    trial_id,
+                                    len(processed_images),
+                                    batch_size,
+                                    multiview_params
+                                )
+                        else:
+                            # Single-image generation
+                            with st.spinner("Generating 3D model..."):
+                                if st.session_state.get('processed_preview') is not None:
+                                    processed_image = st.session_state.processed_preview
+                                    trial_id = str(uuid.uuid4())
+                                    processed_image.save(f"{TMP_DIR}/{trial_id}.png", quality=100, subsampling=0)
+                                else:
+                                    trial_id, processed_image = ImageProcessor.preprocess_single_image(
+                                        uploaded_data,
+                                        use_refinement
+                                    )
+
+                                # Get auto-adjust setting for single-view
+                                auto_adjust_enabled = st.session_state.get("auto_adjust_single", False)
+
+                                # For single-view, auto-adjust doesn't change guidance (no contradiction to measure)
+                                # Always use slider values
+                                ss_guidance_strength = st.session_state.get("ss_strength_single", 7.5)
+                                slat_guidance_strength = st.session_state.get("slat_strength_single", 3.0)
+                                ss_sampling_steps = st.session_state.get("ss_steps_single", 12)
+                                slat_sampling_steps = st.session_state.get("slat_steps_single", 12)
+
+                                params = GenerationParams(
+                                    seed=seed if not randomize_seed else np.random.randint(0, MAX_SEED),
+                                    randomize_seed=randomize_seed,
+                                    ss_guidance_strength=ss_guidance_strength,
+                                    ss_sampling_steps=ss_sampling_steps,
+                                    slat_guidance_strength=slat_guidance_strength,
+                                    slat_sampling_steps=slat_sampling_steps
+                                )
+
+                                state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
+                        # Exit spinner context before setting state
+                        StateManager.set_generated_glb(None)
+                        StateManager.set_generated_video(video_path)
+                        StateManager.set_generated_state(state)
+
+                        # Extract GLB after video generation with proper synchronization
+                        if state is not None:
+                            # Get the current values from session state
+                            export_params = ExportParams(
+                                mesh_simplify=st.session_state.get('mesh_simplify', 0.95),
+                                texture_size=st.session_state.get('texture_size', 1024),
+                                fill_holes_resolution=st.session_state.get('fill_holes_resolution', 1024),
+                                fill_holes_num_views=st.session_state.get('fill_holes_num_views', 1000)
                             )
-                            
-                            state, video_path = ModelGenerator.generate_from_single_image(trial_id, params)
-                    
-                    # Exit spinner context before setting state
-                    StateManager.set_generated_glb(None)
-                    StateManager.set_generated_video(video_path)
-                    StateManager.set_generated_state(state)
 
-                    # Extract GLB after video generation with proper synchronization
-                    if state is not None:
-                        # Get the current values from session state
-                        export_params = ExportParams(
-                            mesh_simplify=st.session_state.get('mesh_simplify', 0.95),
-                            texture_size=st.session_state.get('texture_size', 1024),
-                            fill_holes_resolution=st.session_state.get('fill_holes_resolution', 1024),
-                            fill_holes_num_views=st.session_state.get('fill_holes_num_views', 1000)
-                        )
+                            try:
+                                # Show progress for GLB extraction
+                                with st.spinner("Extracting 3D model..."):
+                                    glb_path, _ = GLBExporter.extract(state, export_params)
 
-                        try:
-                            # Show progress for GLB extraction
-                            with st.spinner("Extracting 3D model..."):
-                                glb_path, _ = GLBExporter.extract(state, export_params)
+                                # Ensure state is properly set before UI update
+                                StateManager.set_generated_glb(glb_path)
 
-                            # Ensure state is properly set before UI update
-                            StateManager.set_generated_glb(glb_path)
+                                # Force a small delay to ensure state propagation
+                                time.sleep(0.1)
 
-                            # Force a small delay to ensure state propagation
-                            time.sleep(0.1)
+                                st.success("✅ 3D model complete!")
 
-                            st.success("✅ 3D model complete!")
+                                # Trigger UI refresh to ensure 3D model appears
+                                st.rerun()
 
-                            # Trigger UI refresh to ensure 3D model appears
-                            st.rerun()
+                            except Exception as e:
+                                st.warning(f"GLB extraction failed: {e}")
+                                # Ensure GLB state is cleared on failure
+                                StateManager.set_generated_glb(None)
 
-                        except Exception as e:
-                            st.warning(f"GLB extraction failed: {e}")
-                            # Ensure GLB state is cleared on failure
-                            StateManager.set_generated_glb(None)
-
-                    StateManager.set_generating(False)
+                    finally:
+                        # Always ensure generation state is reset, even if an exception occurs
+                        StateManager.set_generating(False)
                 except Exception as e:
-                    StateManager.set_generating(False)
                     st.error(f"❌ Generation failed: {str(e)}")
                     st.warning("Try reducing image size or restarting the application if memory errors persist.")
                     import traceback
