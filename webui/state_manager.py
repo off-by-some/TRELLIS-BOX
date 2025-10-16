@@ -232,6 +232,12 @@ class StateManager(StreamlitStore):
             cls._instance = super().__new__(cls)
         return cls._instance
 
+    @classmethod
+    def initialize(cls) -> None:
+        """Initialize the StateManager singleton instance."""
+        # This will trigger __init__ if not already initialized
+        _ = cls()
+
     def clear_generated_content(self) -> None:
         """Clear all generated content."""
         # Clear observable values (this also clears session state via subscribers)
