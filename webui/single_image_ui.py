@@ -52,70 +52,71 @@ class SingleImageUI:
         # Handle uploaded image
         if uploaded_file is not None:
             new_image = Image.open(uploaded_file)
-            current_image = StateManager.uploaded_image.value
-
-            if current_image is None or current_image != new_image:
-                StateManager.uploaded_image = new_image
-                StateManager.processed_preview = None
-                StateManager.generated_video = None
-                StateManager.generated_glb = None
-                StateManager.generated_state = None
-                st.rerun()
+            with StateManager.uploaded_image as current_image:
+                if current_image is None or current_image != new_image:
+                    StateManager.uploaded_image = new_image
+                    StateManager.processed_preview = None
+                    StateManager.generated_video = None
+                    StateManager.generated_glb = None
+                    StateManager.generated_state = None
+                    st.rerun()
 
         # Show uploaded image
-        uploaded_image = StateManager.uploaded_image.value
-        if uploaded_image is not None:
-            # Image preprocessing options
-            with st.expander("Image Preprocessing Options", expanded=True):
-                col1, col2 = st.columns(2)
+        with StateManager.uploaded_image as uploaded_image:
+            if uploaded_image is not None:
+                # Image preprocessing options
+                with st.expander("Image Preprocessing Options", expanded=True):
+                    col1, col2 = st.columns(2)
 
-                with col1:
-                    use_refinement = st.checkbox(
-                        "Apply Image Refinement (SSD-1B)",
-                        value=False,
-                        help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s processing time.",
-                        key="refinement_single_input"
-                    )
+                    with col1:
+                        use_refinement = st.checkbox(
+                            "Apply Image Refinement (SSD-1B)",
+                            value=False,
+                            help="Enhance input quality with SSD-1B after background removal. Adds ~5-7s processing time.",
+                            key="refinement_single_input"
+                        )
 
-                with col2:
-                    valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
+                    with col2:
+                        valid_sizes = [i * 14 for i in range(19, 74)]  # 266 to 1022
 
-                    resize_width = st.selectbox(
-                        "Resize Width",
-                        options=valid_sizes,
-                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                        key="resize_width_single",
-                        help="Width to resize images to for conditioning model (must be multiple of 14)",
-                        format_func=lambda x: f"{x}px"
-                    )
-                    StateManager.resize_width = resize_width
+                        resize_width = st.selectbox(
+                            "Resize Width",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key="resize_width_single",
+                            help="Width to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
+                        StateManager.resize_width = resize_width
 
-                    resize_height = st.selectbox(
-                        "Resize Height",
-                        options=valid_sizes,
-                        index=valid_sizes.index(518) if 518 in valid_sizes else 0,
-                        key="resize_height_single",
-                        help="Height to resize images to for conditioning model (must be multiple of 14)",
-                        format_func=lambda x: f"{x}px"
-                    )
-                    StateManager.resize_height = resize_height
+                        resize_height = st.selectbox(
+                            "Resize Height",
+                            options=valid_sizes,
+                            index=valid_sizes.index(518) if 518 in valid_sizes else 0,
+                            key="resize_height_single",
+                            help="Height to resize images to for conditioning model (must be multiple of 14)",
+                            format_func=lambda x: f"{x}px"
+                        )
+                        StateManager.resize_height = resize_height
 
-            st.markdown("**Uploaded Image:**")
-            st.image(uploaded_image, use_container_width=True)
+                st.markdown("**Uploaded Image:**")
+                st.image(uploaded_image, use_container_width=True)
 
             # Auto-process and show final processed preview
             pipeline = controller.get_pipeline()
             if pipeline is not None and uploaded_image is not None:
-                current_width = StateManager.resize_width.value
-                current_height = StateManager.resize_height.value
-                target_size = (current_width, current_height)
+                with StateManager.resize_width as current_width, \
+                     StateManager.resize_height as current_height, \
+                     StateManager.processed_preview as processed_image, \
+                     StateManager.processed_preview_size as processed_preview_size, \
+                     StateManager.current_refinement_setting as current_refinement_setting:
 
-                processed_image = StateManager.processed_preview.value
-                needs_regeneration = (
-                    processed_image is None or
-                    StateManager.processed_preview_size.value != target_size or
-                    StateManager.current_refinement_setting.value != use_refinement
-                )
+                    target_size = (current_width, current_height)
+                    needs_regeneration = (
+                        processed_image is None or
+                        processed_preview_size != target_size or
+                        current_refinement_setting != use_refinement
+                    )
 
                 if needs_regeneration:
                     with st.spinner("Processing image..."):
@@ -141,8 +142,8 @@ class SingleImageUI:
         """Render the output column."""
         st.subheader("Output")
 
-        uploaded_image = StateManager.uploaded_image.value
-        SingleImageUI._render_generation_panel(
+        with StateManager.uploaded_image as uploaded_image:
+            SingleImageUI._render_generation_panel(
             controller=controller,
             uploaded_data=uploaded_image,
             is_multi_image=False,
@@ -263,8 +264,9 @@ class SingleImageUI:
                 fill_holes_num_views = st.slider("Hole Fill Views", 100, 4000, 1000, 100, key=f"fill_views_{trial_id}")
 
             # Generate button
-            is_generating = StateManager.is_generating()
-            has_generated = StateManager.generated_video.value is not None
+            with StateManager.is_generating as is_generating, \
+                 StateManager.generated_video as generated_video:
+                has_generated = generated_video is not None
 
             button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
             button_disabled = is_generating
@@ -275,11 +277,11 @@ class SingleImageUI:
 
                     with st.spinner("Generating 3D model..."):
                         # Get processed preview
-                        processed_result = StateManager.processed_preview.value
-                        if processed_result is None:
-                            with StateManager.refinement_single_input as refinement_input:
-                                processed_result = controller.process_image(uploaded_data, refinement_input)
-                            StateManager.processed_preview = processed_result.processed_images
+                        with StateManager.processed_preview as processed_result:
+                            if processed_result is None:
+                                with StateManager.refinement_single_input as refinement_input:
+                                    processed_result = controller.process_image(uploaded_data, refinement_input)
+                                StateManager.processed_preview = processed_result.processed_images
 
                         # Create generation params
                         params = controller.create_generation_params(
@@ -292,11 +294,13 @@ class SingleImageUI:
                         )
 
                         # Generate
-                        result = controller.generate_single(
-                            processed_result.trial_id,
-                            params,
-                            (StateManager.resize_width.value, StateManager.resize_height.value)
-                        )
+                        with StateManager.resize_width as resize_width, \
+                             StateManager.resize_height as resize_height:
+                            result = controller.generate_single(
+                                processed_result.trial_id,
+                                params,
+                                (resize_width, resize_height)
+                            )
 
                         # Export GLB
                         export_params = controller.create_export_params(
@@ -330,50 +334,50 @@ class SingleImageUI:
         """Render output preview section."""
         # Video preview
         with st.container():
-            is_generating = StateManager.is_generating()
-            clear_video = show_video_preview(
-                StateManager.generated_video.value,
-                show_clear=True,
-                clear_key=video_key,
-                show_progress=is_generating,
-                progress_text="Generating 3D model..." if is_generating else None
-            )
-            if clear_video == "clear":
-                StateManager.generated_video = None
-                StateManager.generated_glb = None
-                StateManager.generated_state = None
-                st.rerun()
+            with StateManager.is_generating as is_generating, \
+                 StateManager.generated_video as generated_video:
+                clear_video = show_video_preview(
+                    generated_video,
+                    show_clear=True,
+                    clear_key=video_key,
+                    show_progress=is_generating,
+                    progress_text="Generating 3D model..." if is_generating else None
+                )
+                if clear_video == "clear":
+                    StateManager.generated_video = None
+                    StateManager.generated_glb = None
+                    StateManager.generated_state = None
+                    st.rerun()
 
         # 3D model viewer
-        generated_video = StateManager.generated_video.value
-        generated_glb = StateManager.generated_glb.value
-        generated_state = StateManager.generated_state.value
+        with StateManager.generated_video as generated_video, \
+             StateManager.generated_glb as generated_glb, \
+             StateManager.generated_state as generated_state:
+            if generated_glb and generated_video and generated_state:
+                st.success("✅ 3D Model Ready!")
 
-        if generated_glb and generated_video and generated_state:
-            st.success("✅ 3D Model Ready!")
-
-            clear_glb = show_3d_model_viewer(
-                generated_glb,
-                show_clear=True,
-                clear_key=glb_key
-            )
-            if clear_glb == "clear":
-                StateManager.generated_glb = None
-                StateManager.generated_state = None
-                st.rerun()
-
-            # Download button
-            with open(generated_glb, "rb") as file:
-                st.download_button(
-                    label="📥 Download GLB",
-                    data=file,
-                    file_name="generated_model.glb",
-                    mime="model/gltf-binary",
-                    type="primary",
-                    key=download_key
+                clear_glb = show_3d_model_viewer(
+                    generated_glb,
+                    show_clear=True,
+                    clear_key=glb_key
                 )
-        else:
-            show_3d_model_viewer(None)
+                if clear_glb == "clear":
+                    StateManager.generated_glb = None
+                    StateManager.generated_state = None
+                    st.rerun()
+
+                # Download button
+                with open(generated_glb, "rb") as file:
+                    st.download_button(
+                        label="📥 Download GLB",
+                        data=file,
+                        file_name="generated_model.glb",
+                        mime="model/gltf-binary",
+                        type="primary",
+                        key=download_key
+                    )
+            else:
+                show_3d_model_viewer(None)
 
     @staticmethod
     def _render_examples(controller: AppController) -> None:
