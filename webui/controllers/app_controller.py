@@ -12,7 +12,7 @@ from .memory_controller import MemoryController
 from .generation_controller import GenerationController
 from library.models import GenerationParams, ExportParams
 from webui.initialize_pipeline import load_pipeline
-from library.memory_utils import reduce_memory_usage
+from webui.state_manager import StateManager
 
 
 class AppController:
@@ -28,29 +28,20 @@ class AppController:
         self.memory_controller = MemoryController(self.tmp_dir)
         self.generation_controller = GenerationController(tmp_dir=self.tmp_dir)
 
-        self.pipeline: Optional[Any] = None
-
-    def initialize_pipeline(self) -> Any:
+    def initialize_pipeline(self) -> None:
         """
         Initialize or load the TRELLIS pipeline.
-
-        Returns:
-            The loaded pipeline
         """
-        if self.pipeline is None:
-            # Clean CUDA memory before loading
-            if torch.cuda.is_available():
-                print("Clearing CUDA memory before pipeline initialization...")
-                self.memory_controller.reduce_memory()
+        with StateManager.pipeline as pipeline:
+            if pipeline is None:
+                # Clean CUDA memory before loading
+                if torch.cuda.is_available():
+                    print("Clearing CUDA memory before pipeline initialization...")
+                    self.memory_controller.reduce_memory()
 
-            self.pipeline = load_pipeline()
-            self.generation_controller.set_pipeline(self.pipeline)
+                loaded_pipeline = load_pipeline()
+                StateManager.pipeline.set(loaded_pipeline)
 
-        return self.pipeline
-
-    def get_pipeline(self) -> Optional[Any]:
-        """Get the current pipeline instance."""
-        return self.pipeline
 
     def check_gpu(self) -> Optional[str]:
         """
@@ -112,7 +103,7 @@ class AppController:
             fill_holes_num_views=fill_holes_num_views
         )
 
-    def process_image(self, image: Image.Image, use_refinement: bool = False):
+    def process_image(self, pipeline: Any, image: Image.Image, use_refinement: bool = False):
         """
         Process a single image.
 
@@ -123,9 +114,9 @@ class AppController:
         Returns:
             ProcessingResult
         """
-        return self.generation_controller.process_single_image(image, use_refinement)
+        return self.generation_controller.process_single_image(pipeline, image, use_refinement)
 
-    def process_images(self, images: List[Image.Image], use_refinement: bool = False):
+    def process_images(self, pipeline: Any, images: List[Image.Image], use_refinement: bool = False):
         """
         Process multiple images.
 
@@ -136,9 +127,9 @@ class AppController:
         Returns:
             ProcessingResult
         """
-        return self.generation_controller.process_multiple_images(images, use_refinement)
+        return self.generation_controller.process_multiple_images(pipeline, images, use_refinement)
 
-    def generate_single(self, trial_id: str, params: GenerationParams, resize_dims: Tuple[int, int] = (518, 518)):
+    def generate_single(self, pipeline: Any, trial_id: str, params: GenerationParams, resize_dims: Tuple[int, int] = (518, 518)):
         """
         Generate 3D model from single image.
 
@@ -151,10 +142,11 @@ class AppController:
             GenerationResult
         """
         self.memory_controller.reduce_memory()
-        return self.generation_controller.generate_from_single_image(trial_id, params, resize_dims)
+        return self.generation_controller.generate_from_single_image(pipeline, trial_id, params, resize_dims)
 
     def generate_multiple(
         self,
+        pipeline: Any,
         trial_id: str,
         num_images: int,
         params: GenerationParams,
@@ -178,7 +170,7 @@ class AppController:
         """
         self.memory_controller.reduce_memory()
         return self.generation_controller.generate_from_multiple_images(
-            trial_id, num_images, params, batch_size, resize_dims, condition_data
+            pipeline, trial_id, num_images, params, batch_size, resize_dims, condition_data
         )
 
     def export_model(self, model_state, params: ExportParams):
@@ -195,7 +187,7 @@ class AppController:
         self.memory_controller.reduce_memory()
         return self.generation_controller.export_glb(model_state, params)
 
-    def get_conditioning(self, images: List[Image.Image], resize_dims: Tuple[int, int] = (518, 518)) -> Dict[str, Any]:
+    def get_conditioning(self, pipeline: Any, images: List[Image.Image], resize_dims: Tuple[int, int] = (518, 518)) -> Dict[str, Any]:
         """
         Get conditioning data for multi-view images.
 
@@ -206,4 +198,4 @@ class AppController:
         Returns:
             Conditioning data
         """
-        return self.generation_controller.get_conditioning_data(images, resize_dims)
+        return self.generation_controller.get_conditioning_data(pipeline, images, resize_dims)

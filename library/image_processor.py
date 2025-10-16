@@ -11,24 +11,17 @@ from PIL import Image
 from library.image_refiner import ImageRefiner
 from library.models import ProcessingResult
 
-
 class ImageProcessor:
     """Handles image preprocessing and refinement operations."""
 
-    def __init__(self, pipeline: Optional[Any] = None, tmp_dir: str = "/tmp/Trellis-demo"):
+    def __init__(self, tmp_dir: str = "/tmp/Trellis-demo"):
         """Initialize the image processor.
 
         Args:
-            pipeline: TRELLIS pipeline for image preprocessing
             tmp_dir: Directory for temporary files
         """
-        self.pipeline = pipeline
         self.tmp_dir = tmp_dir
         self.refiner: Optional[ImageRefiner] = None
-
-    def set_pipeline(self, pipeline: Any) -> None:
-        """Set the TRELLIS pipeline."""
-        self.pipeline = pipeline
 
     def load_refiner(self) -> None:
         """Load the SSD-1B refiner lazily."""
@@ -67,7 +60,7 @@ class ImageProcessor:
         )
         return refined_image
 
-    def preprocess_single_image(self, image: Image.Image, use_refinement: bool = False) -> ProcessingResult:
+    def preprocess_single_image(self, pipeline: Any, image: Image.Image, use_refinement: bool = False) -> ProcessingResult:
         """
         Preprocess a single input image with memory-efficient operations.
         Background removal happens first, then refinement if requested.
@@ -84,7 +77,7 @@ class ImageProcessor:
         # Memory-efficient preprocessing with no gradients (background removal first)
         with torch.no_grad():
             with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
-                processed_image = self.pipeline.preprocess_image(image)
+                processed_image = pipeline.preprocess_image(image)
 
         # Apply refinement after background removal if requested
         if use_refinement:
@@ -99,7 +92,7 @@ class ImageProcessor:
 
         return ProcessingResult(trial_id=trial_id, processed_images=processed_image)
 
-    def preprocess_multiple_images(self, images: List[Image.Image], use_refinement: bool = False) -> ProcessingResult:
+    def preprocess_multiple_images(self, pipeline: Any, images: List[Image.Image], use_refinement: bool = False) -> ProcessingResult:
         """
         Preprocess multiple input images for multi-view 3D reconstruction.
         Background removal happens first, then refinement if requested.
@@ -118,7 +111,7 @@ class ImageProcessor:
         # Process images one by one to minimize memory usage
         for i, img in enumerate(images):
             # Background removal first
-            processed_img = self.pipeline.preprocess_image(img)
+            processed_img = pipeline.preprocess_image(img)
 
             # Apply refinement after background removal if requested
             if use_refinement:

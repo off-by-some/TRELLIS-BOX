@@ -75,49 +75,50 @@ class TrellisApp:
         """Initialize or load the TRELLIS pipeline with UI."""
         StateManager.initialize()
 
-        pipeline = StateManager.get_pipeline()
+        with StateManager.pipeline as pipeline:
+            # Always sync controller pipeline with session state
+            if pipeline is not None:
+                pass  # Pipeline is already available
+            else:
+                # Check if pipeline is already cached
+                from webui.initialize_pipeline import _PIPELINE_SINGLETON
 
-        if pipeline is None:
-            # Check if pipeline is already cached
-            from webui.initialize_pipeline import _PIPELINE_SINGLETON
+                if _PIPELINE_SINGLETON is not None:
+                    print("Using cached pipeline from previous session")
+                    pipeline = _PIPELINE_SINGLETON
+                    StateManager.pipeline.set(pipeline)
+                    st.rerun()
 
-            if _PIPELINE_SINGLETON is not None:
-                print("Using cached pipeline from previous session")
-                pipeline = _PIPELINE_SINGLETON
-                StateManager.set_pipeline(pipeline)
-                self.controller.pipeline = pipeline
-                st.rerun()
+                # Pipeline not cached, show full loading screen
+                gpu_info = self._check_gpu()
 
-            # Pipeline not cached, show full loading screen
-            gpu_info = self._check_gpu()
+                # Show loading screen
+                progress_bar, status_text, console_output, start_time = show_loading_screen(gpu_info)
 
-            # Show loading screen
-            progress_bar, status_text, console_output, start_time = show_loading_screen(gpu_info)
+                status_text.text("Loading TRELLIS pipeline...")
+                progress_bar.progress(10)
 
-            status_text.text("Loading TRELLIS pipeline...")
-            progress_bar.progress(10)
+                try:
+                    with capture_output(console_output):
+                        pipeline = self.controller.initialize_pipeline()
 
-            try:
-                with capture_output(console_output):
-                    pipeline = self.controller.initialize_pipeline()
+                    StateManager.pipeline.set(pipeline)
 
-                StateManager.set_pipeline(pipeline)
+                    # Complete loading UI
+                    finalize_loading(progress_bar, status_text, pipeline)
 
-                # Complete loading UI
-                finalize_loading(progress_bar, status_text, pipeline)
-
-            except RuntimeError as e:
-                if "out of memory" in str(e).lower():
-                    progress_bar.progress(0)
-                    status_text.text("Error: Out of GPU memory")
-                    st.error("❌ Out of GPU Memory")
-                    st.error(str(e))
-                    st.warning("**Solution:** Please restart the application to clear GPU memory.")
-                    st.code("docker-compose restart", language="bash")
-                    st.info("If the problem persists, there may be other processes using GPU memory. Check with `nvidia-smi`")
-                    st.stop()
-                else:
-                    raise
+                except RuntimeError as e:
+                    if "out of memory" in str(e).lower():
+                        progress_bar.progress(0)
+                        status_text.text("Error: Out of GPU memory")
+                        st.error("❌ Out of GPU Memory")
+                        st.error(str(e))
+                        st.warning("**Solution:** Please restart the application to clear GPU memory.")
+                        st.code("docker-compose restart", language="bash")
+                        st.info("If the problem persists, there may be other processes using GPU memory. Check with `nvidia-smi`")
+                        st.stop()
+                    else:
+                        raise
 
     def run(self) -> None:
         """Run the main application."""

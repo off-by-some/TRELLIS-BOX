@@ -113,8 +113,8 @@ class SingleImageUI:
                 processed_image = StateManager.get_processed_preview()
                 needs_regeneration = (
                     processed_image is None or
-                    st.session_state.get("processed_preview_size") != target_size or
-                    st.session_state.get("current_refinement_setting", False) != use_refinement
+                    StateManager.processed_preview_size != target_size or
+                    StateManager.current_refinement_setting != use_refinement
                 )
 
                 if needs_regeneration:
@@ -277,7 +277,8 @@ class SingleImageUI:
                         # Get processed preview
                         processed_result = StateManager.get_processed_preview()
                         if processed_result is None:
-                            processed_result = controller.process_image(uploaded_data, st.session_state.get("refinement_single_input", False))
+                            with StateManager.refinement_single_input as refinement_input:
+                                processed_result = controller.process_image(uploaded_data, refinement_input)
                             StateManager.set_processed_preview(processed_result.processed_images)
 
                         # Create generation params

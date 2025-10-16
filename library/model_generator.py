@@ -19,19 +19,13 @@ from library.video_renderer import VideoRenderer
 class ModelGenerator:
     """Handles 3D model generation from images."""
 
-    def __init__(self, pipeline: Optional[Any] = None, tmp_dir: str = "/tmp/Trellis-demo"):
+    def __init__(self, tmp_dir: str = "/tmp/Trellis-demo"):
         """Initialize the model generator.
 
         Args:
-            pipeline: TRELLIS pipeline for generation
             tmp_dir: Directory for temporary files
         """
-        self.pipeline = pipeline
         self.tmp_dir = tmp_dir
-
-    def set_pipeline(self, pipeline: Any) -> None:
-        """Set the TRELLIS pipeline."""
-        self.pipeline = pipeline
 
     def pack_model_state(self, gs: Gaussian, mesh: Any, trial_id: str) -> ModelState:
         """
@@ -98,6 +92,7 @@ class ModelGenerator:
 
     def generate_from_single_image(
         self,
+        pipeline: Any,
         image_path: str,
         params: GenerationParams,
         resize_dims: Tuple[int, int] = (518, 518)
@@ -177,6 +172,7 @@ class ModelGenerator:
 
     def generate_from_multiple_images(
         self,
+        pipeline: Any,
         trial_id: str,
         num_images: int,
         params: GenerationParams,

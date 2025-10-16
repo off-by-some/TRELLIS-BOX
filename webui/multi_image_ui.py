@@ -74,7 +74,7 @@ class MultiImageUI:
                             help="Width to resize images to for conditioning model (must be multiple of 14)",
                             format_func=lambda x: f"{x}px"
                         )
-                        StateManager.set_resize_width(resize_width)
+                        StateManager.resize_width = resize_width
 
                         resize_height = st.selectbox(
                             "Resize Height",
@@ -84,7 +84,7 @@ class MultiImageUI:
                             help="Height to resize images to for conditioning model (must be multiple of 14)",
                             format_func=lambda x: f"{x}px"
                         )
-                        StateManager.set_resize_height(resize_height)
+                        StateManager.resize_height = resize_height
 
                 st.markdown("**Uploaded Images:**")
                 for i, uploaded_file in enumerate(multi_uploaded_files):
@@ -92,25 +92,24 @@ class MultiImageUI:
                     st.image(image, caption=f"Image {i+1}", use_container_width=True)
 
                 # Show processed previews
-                pipeline = StateManager.get_pipeline()
-                if pipeline is not None:
-                    current_width = StateManager.get_resize_width()
-                    current_height = StateManager.get_resize_height()
+                with StateManager.pipeline as pipeline:
+                    if pipeline is not None:
+                        with StateManager.resize_width as current_width, \
+                             StateManager.resize_height as current_height:
+                            preview_label = "**Processed Previews**"
+                            if use_refinement:
+                                preview_label += " *(with refinement)*"
+                            else:
+                                preview_label += " *(background removed)*"
+                            st.markdown(preview_label)
 
-                    preview_label = "**Processed Previews**"
-                    if use_refinement:
-                        preview_label += " *(with refinement)*"
+                            for i, uploaded_file in enumerate(multi_uploaded_files):
+                                image = Image.open(uploaded_file)
+                                # Note: In a full implementation, you'd want to cache these processed images
+                                # For now, just show the originals as placeholders
+                                st.image(image, caption=f"Processed {i+1}", use_container_width=True)
                     else:
-                        preview_label += " *(background removed)*"
-                    st.markdown(preview_label)
-
-                    for i, uploaded_file in enumerate(multi_uploaded_files):
-                        image = Image.open(uploaded_file)
-                        # Note: In a full implementation, you'd want to cache these processed images
-                        # For now, just show the originals as placeholders
-                        st.image(image, caption=f"Processed {i+1}", use_container_width=True)
-                else:
-                    st.info("Processed previews will be shown after pipeline loads")
+                        st.info("Processed previews will be shown after pipeline loads")
 
     @staticmethod
     def _render_output_column(controller: AppController) -> None:

@@ -19,28 +19,20 @@ from library.glb_exporter import GLBExporter
 class GenerationController:
     """Handles the coordination of generation workflows."""
 
-    def __init__(self, pipeline: Optional[Any] = None, tmp_dir: str = "/tmp/Trellis-demo"):
+    def __init__(self, tmp_dir: str = "/tmp/Trellis-demo"):
         """Initialize the generation controller.
 
         Args:
-            pipeline: TRELLIS pipeline instance
             tmp_dir: Directory for temporary files
         """
-        self.pipeline = pipeline
         self.tmp_dir = tmp_dir
 
         # Initialize library components
-        self.image_processor = ImageProcessor(pipeline=pipeline, tmp_dir=tmp_dir)
-        self.model_generator = ModelGenerator(pipeline=pipeline, tmp_dir=tmp_dir)
+        self.image_processor = ImageProcessor(tmp_dir=tmp_dir)
+        self.model_generator = ModelGenerator(tmp_dir=tmp_dir)
         self.glb_exporter = GLBExporter(tmp_dir=tmp_dir)
 
-    def set_pipeline(self, pipeline: Any) -> None:
-        """Set the TRELLIS pipeline for all components."""
-        self.pipeline = pipeline
-        self.image_processor.set_pipeline(pipeline)
-        self.model_generator.set_pipeline(pipeline)
-
-    def process_single_image(self, image: Image.Image, use_refinement: bool = False) -> ProcessingResult:
+    def process_single_image(self, pipeline: Any, image: Image.Image, use_refinement: bool = False) -> ProcessingResult:
         """
         Process a single image for generation.
 
@@ -51,9 +43,9 @@ class GenerationController:
         Returns:
             ProcessingResult with processed image data
         """
-        return self.image_processor.preprocess_single_image(image, use_refinement)
+        return self.image_processor.preprocess_single_image(pipeline, image, use_refinement)
 
-    def process_multiple_images(self, images: List[Image.Image], use_refinement: bool = False) -> ProcessingResult:
+    def process_multiple_images(self, pipeline: Any, images: List[Image.Image], use_refinement: bool = False) -> ProcessingResult:
         """
         Process multiple images for generation.
 
@@ -64,10 +56,11 @@ class GenerationController:
         Returns:
             ProcessingResult with processed images data
         """
-        return self.image_processor.preprocess_multiple_images(images, use_refinement)
+        return self.image_processor.preprocess_multiple_images(pipeline, images, use_refinement)
 
     def generate_from_single_image(
         self,
+        pipeline: Any,
         trial_id: str,
         params: GenerationParams,
         resize_dims: Tuple[int, int] = (518, 518)
@@ -84,10 +77,11 @@ class GenerationController:
             GenerationResult with model and video
         """
         image_path = f"{self.tmp_dir}/{trial_id}.png"
-        return self.model_generator.generate_from_single_image(image_path, params, resize_dims)
+        return self.model_generator.generate_from_single_image(pipeline, image_path, params, resize_dims)
 
     def generate_from_multiple_images(
         self,
+        pipeline: Any,
         trial_id: str,
         num_images: int,
         params: GenerationParams,
@@ -110,7 +104,7 @@ class GenerationController:
             GenerationResult with model and video
         """
         return self.model_generator.generate_from_multiple_images(
-            trial_id, num_images, params, batch_size, resize_dims, condition_data
+            pipeline, trial_id, num_images, params, batch_size, resize_dims, condition_data
         )
 
     def export_glb(self, model_state: ModelState, params: ExportParams) -> ExportResult:
@@ -126,7 +120,7 @@ class GenerationController:
         """
         return self.glb_exporter.export(model_state, params)
 
-    def get_conditioning_data(self, images: List[Image.Image], resize_dims: Tuple[int, int] = (518, 518)) -> Dict[str, Any]:
+    def get_conditioning_data(self, pipeline: Any, images: List[Image.Image], resize_dims: Tuple[int, int] = (518, 518)) -> Dict[str, Any]:
         """
         Get conditioning data for multi-view images.
 
@@ -137,8 +131,8 @@ class GenerationController:
         Returns:
             Conditioning data dictionary
         """
-        cond = self.pipeline.get_cond(images, target_size=resize_dims)
-        contradiction = self.pipeline.analyze_contradiction(cond)
+        cond = pipeline.get_cond(images, target_size=resize_dims)
+        contradiction = pipeline.analyze_contradiction(cond)
         return {
             'cond': cond,
             'contradiction': contradiction,
