@@ -55,11 +55,11 @@ class SingleImageUI:
             current_image = StateManager.uploaded_image
 
             if current_image is None or current_image != new_image:
-                StateManager.set_uploaded_image(new_image)
-                StateManager.set_processed_preview(None)
-                StateManager.set_generated_video(None)
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
+                StateManager.uploaded_image = new_image
+                StateManager.processed_preview = None
+                StateManager.generated_video = None
+                StateManager.generated_glb = None
+                StateManager.generated_state = None
                 st.rerun()
 
         # Show uploaded image
@@ -88,7 +88,7 @@ class SingleImageUI:
                         help="Width to resize images to for conditioning model (must be multiple of 14)",
                         format_func=lambda x: f"{x}px"
                     )
-                    StateManager.set_resize_width(resize_width)
+                    StateManager.resize_width = resize_width
 
                     resize_height = st.selectbox(
                         "Resize Height",
@@ -98,7 +98,7 @@ class SingleImageUI:
                         help="Height to resize images to for conditioning model (must be multiple of 14)",
                         format_func=lambda x: f"{x}px"
                     )
-                    StateManager.set_resize_height(resize_height)
+                    StateManager.resize_height = resize_height
 
             st.markdown("**Uploaded Image:**")
             st.image(uploaded_image, use_container_width=True)
@@ -106,11 +106,11 @@ class SingleImageUI:
             # Auto-process and show final processed preview
             pipeline = controller.get_pipeline()
             if pipeline is not None and uploaded_image is not None:
-                current_width = StateManager.get_resize_width()
-                current_height = StateManager.get_resize_height()
+                current_width = StateManager.resize_width
+                current_height = StateManager.resize_height
                 target_size = (current_width, current_height)
 
-                processed_image = StateManager.get_processed_preview()
+                processed_image = StateManager.processed_preview
                 needs_regeneration = (
                     processed_image is None or
                     StateManager.processed_preview_size != target_size or
@@ -121,7 +121,7 @@ class SingleImageUI:
                     with st.spinner("Processing image..."):
                         result = controller.process_image(uploaded_image, use_refinement)
                         processed_image = result.processed_images
-                        StateManager.set_processed_preview(processed_image)
+                        StateManager.processed_preview = processed_image
                         st.session_state.processed_preview_size = target_size
                         st.session_state.current_refinement_setting = use_refinement
 
@@ -264,22 +264,22 @@ class SingleImageUI:
 
             # Generate button
             is_generating = StateManager.is_generating()
-            has_generated = StateManager.get_generated_video() is not None
+            has_generated = StateManager.generated_video is not None
 
             button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
             button_disabled = is_generating
 
             if st.button(button_label, type="primary", key=generate_key, use_container_width=True, disabled=button_disabled):
                 try:
-                    StateManager.set_generating(True)
+                    StateManager.is_generating = True
 
                     with st.spinner("Generating 3D model..."):
                         # Get processed preview
-                        processed_result = StateManager.get_processed_preview()
+                        processed_result = StateManager.processed_preview
                         if processed_result is None:
                             with StateManager.refinement_single_input as refinement_input:
                                 processed_result = controller.process_image(uploaded_data, refinement_input)
-                            StateManager.set_processed_preview(processed_result.processed_images)
+                            StateManager.processed_preview = processed_result.processed_images
 
                         # Create generation params
                         params = controller.create_generation_params(
@@ -295,7 +295,7 @@ class SingleImageUI:
                         result = controller.generate_single(
                             processed_result.trial_id,
                             params,
-                            (StateManager.get_resize_width(), StateManager.get_resize_height())
+                            (StateManager.resize_width, StateManager.resize_height)
                         )
 
                         # Export GLB
@@ -309,9 +309,9 @@ class SingleImageUI:
                         glb_result = controller.export_model(result.model_state, export_params)
 
                         # Update state
-                        StateManager.set_generated_video(result.video_path)
-                        StateManager.set_generated_glb(glb_result.glb_path)
-                        StateManager.set_generated_state(result.model_state)
+                        StateManager.generated_video = result.video_path
+                        StateManager.generated_glb = glb_result.glb_path
+                        StateManager.generated_state = result.model_state
 
                         st.success("✅ 3D model complete!")
                         st.rerun()
@@ -319,7 +319,7 @@ class SingleImageUI:
                 except Exception as e:
                     st.error(f"❌ Generation failed: {str(e)}")
                 finally:
-                    StateManager.set_generating(False)
+                    StateManager.is_generating = False
 
         # Output preview
         st.markdown("---")
@@ -332,22 +332,22 @@ class SingleImageUI:
         with st.container():
             is_generating = StateManager.is_generating()
             clear_video = show_video_preview(
-                StateManager.get_generated_video(),
+                StateManager.generated_video,
                 show_clear=True,
                 clear_key=video_key,
                 show_progress=is_generating,
                 progress_text="Generating 3D model..." if is_generating else None
             )
             if clear_video == "clear":
-                StateManager.set_generated_video(None)
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
+                StateManager.generated_video = None
+                StateManager.generated_glb = None
+                StateManager.generated_state = None
                 st.rerun()
 
         # 3D model viewer
-        generated_video = StateManager.get_generated_video()
-        generated_glb = StateManager.get_generated_glb()
-        generated_state = StateManager.get_generated_state()
+        generated_video = StateManager.generated_video
+        generated_glb = StateManager.generated_glb
+        generated_state = StateManager.generated_state
 
         if generated_glb and generated_video and generated_state:
             st.success("✅ 3D Model Ready!")
@@ -358,8 +358,8 @@ class SingleImageUI:
                 clear_key=glb_key
             )
             if clear_glb == "clear":
-                StateManager.set_generated_glb(None)
-                StateManager.set_generated_state(None)
+                StateManager.generated_glb = None
+                StateManager.generated_state = None
                 st.rerun()
 
             # Download button
@@ -395,9 +395,9 @@ class SingleImageUI:
                 new_size = tuple(int(dim * ratio) for dim in example_img.size)
                 example_img = example_img.resize(new_size, Image.Resampling.LANCZOS)
 
-            StateManager.set_uploaded_image(example_img)
-            StateManager.set_processed_preview(None)
-            StateManager.set_generated_video(None)
-            StateManager.set_generated_glb(None)
-            StateManager.set_generated_state(None)
+            StateManager.uploaded_image = example_img
+            StateManager.processed_preview = None
+            StateManager.generated_video = None
+            StateManager.generated_glb = None
+            StateManager.generated_state = None
             st.rerun()
