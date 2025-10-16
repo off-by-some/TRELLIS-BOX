@@ -63,7 +63,7 @@ class SingleImageUI:
                 st.rerun()
 
         # Show uploaded image
-        uploaded_image = StateManager.get_uploaded_image()
+        uploaded_image = StateManager.uploaded_image
         if uploaded_image is not None:
             # Image preprocessing options
             with st.expander("Image Preprocessing Options", expanded=True):
@@ -141,7 +141,7 @@ class SingleImageUI:
         """Render the output column."""
         st.subheader("Output")
 
-        uploaded_image = StateManager.get_uploaded_image()
+        uploaded_image = StateManager.uploaded_image
         SingleImageUI._render_generation_panel(
             controller=controller,
             uploaded_data=uploaded_image,
