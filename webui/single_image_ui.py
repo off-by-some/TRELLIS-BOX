@@ -52,7 +52,7 @@ class SingleImageUI:
         # Handle uploaded image
         if uploaded_file is not None:
             new_image = Image.open(uploaded_file)
-            current_image = StateManager.uploaded_image
+            current_image = StateManager.uploaded_image.value
 
             if current_image is None or current_image != new_image:
                 StateManager.uploaded_image = new_image
@@ -63,7 +63,7 @@ class SingleImageUI:
                 st.rerun()
 
         # Show uploaded image
-        uploaded_image = StateManager.uploaded_image
+        uploaded_image = StateManager.uploaded_image.value
         if uploaded_image is not None:
             # Image preprocessing options
             with st.expander("Image Preprocessing Options", expanded=True):
@@ -106,15 +106,15 @@ class SingleImageUI:
             # Auto-process and show final processed preview
             pipeline = controller.get_pipeline()
             if pipeline is not None and uploaded_image is not None:
-                current_width = StateManager.resize_width
-                current_height = StateManager.resize_height
+                current_width = StateManager.resize_width.value
+                current_height = StateManager.resize_height.value
                 target_size = (current_width, current_height)
 
-                processed_image = StateManager.processed_preview
+                processed_image = StateManager.processed_preview.value
                 needs_regeneration = (
                     processed_image is None or
-                    StateManager.processed_preview_size != target_size or
-                    StateManager.current_refinement_setting != use_refinement
+                    StateManager.processed_preview_size.value != target_size or
+                    StateManager.current_refinement_setting.value != use_refinement
                 )
 
                 if needs_regeneration:
@@ -122,8 +122,8 @@ class SingleImageUI:
                         result = controller.process_image(uploaded_image, use_refinement)
                         processed_image = result.processed_images
                         StateManager.processed_preview = processed_image
-                        st.session_state.processed_preview_size = target_size
-                        st.session_state.current_refinement_setting = use_refinement
+                        StateManager.processed_preview_size = target_size
+                        StateManager.current_refinement_setting = use_refinement
 
                 if processed_image is not None:
                     preview_label = "**Processed Preview**"
@@ -141,7 +141,7 @@ class SingleImageUI:
         """Render the output column."""
         st.subheader("Output")
 
-        uploaded_image = StateManager.uploaded_image
+        uploaded_image = StateManager.uploaded_image.value
         SingleImageUI._render_generation_panel(
             controller=controller,
             uploaded_data=uploaded_image,
@@ -264,7 +264,7 @@ class SingleImageUI:
 
             # Generate button
             is_generating = StateManager.is_generating()
-            has_generated = StateManager.generated_video is not None
+            has_generated = StateManager.generated_video.value is not None
 
             button_label = "🔄 Regenerate 3D Model" if has_generated else "Generate 3D Model"
             button_disabled = is_generating
@@ -275,7 +275,7 @@ class SingleImageUI:
 
                     with st.spinner("Generating 3D model..."):
                         # Get processed preview
-                        processed_result = StateManager.processed_preview
+                        processed_result = StateManager.processed_preview.value
                         if processed_result is None:
                             with StateManager.refinement_single_input as refinement_input:
                                 processed_result = controller.process_image(uploaded_data, refinement_input)
@@ -285,17 +285,17 @@ class SingleImageUI:
                         params = controller.create_generation_params(
                             seed=seed if not randomize_seed else 0,
                             randomize_seed=randomize_seed,
-                            ss_guidance_strength=st.session_state.get(ss_strength_key, preset_settings["ss_strength"]),
-                            ss_sampling_steps=st.session_state.get(ss_steps_key, preset_settings["ss_steps"]),
-                            slat_guidance_strength=st.session_state.get(slat_strength_key, preset_settings["slat_strength"]),
-                            slat_sampling_steps=st.session_state.get(slat_steps_key, preset_settings["slat_steps"])
+                            ss_guidance_strength=preset_settings["ss_strength"],
+                            ss_sampling_steps=preset_settings["ss_steps"],
+                            slat_guidance_strength=preset_settings["slat_strength"],
+                            slat_sampling_steps=preset_settings["slat_steps"]
                         )
 
                         # Generate
                         result = controller.generate_single(
                             processed_result.trial_id,
                             params,
-                            (StateManager.resize_width, StateManager.resize_height)
+                            (StateManager.resize_width.value, StateManager.resize_height.value)
                         )
 
                         # Export GLB
@@ -332,7 +332,7 @@ class SingleImageUI:
         with st.container():
             is_generating = StateManager.is_generating()
             clear_video = show_video_preview(
-                StateManager.generated_video,
+                StateManager.generated_video.value,
                 show_clear=True,
                 clear_key=video_key,
                 show_progress=is_generating,
@@ -345,9 +345,9 @@ class SingleImageUI:
                 st.rerun()
 
         # 3D model viewer
-        generated_video = StateManager.generated_video
-        generated_glb = StateManager.generated_glb
-        generated_state = StateManager.generated_state
+        generated_video = StateManager.generated_video.value
+        generated_glb = StateManager.generated_glb.value
+        generated_state = StateManager.generated_state.value
 
         if generated_glb and generated_video and generated_state:
             st.success("✅ 3D Model Ready!")

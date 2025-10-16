@@ -43,6 +43,15 @@ class MultiImageUI:
             label_visibility="visible"
         )
 
+        # Handle uploaded files
+        if multi_uploaded_files is not None:
+            current_multi_images = StateManager.multi_images.value
+
+            if current_multi_images is None or current_multi_images != multi_uploaded_files:
+                StateManager.multi_images = multi_uploaded_files
+                StateManager.preserved_multi_images = None
+                st.rerun()
+
         if multi_uploaded_files:
             if len(multi_uploaded_files) < 2:
                 st.warning("Please upload at least 2 images")
@@ -116,9 +125,9 @@ class MultiImageUI:
         """Render the output column."""
         st.subheader("Output")
 
-        multi_uploaded_files = st.session_state.get("multi_images")
+        multi_uploaded_files = StateManager.multi_images.value
         if multi_uploaded_files is None:
-            multi_uploaded_files = st.session_state.get("_preserved_multi_images")
+            multi_uploaded_files = StateManager.preserved_multi_images.value
 
         # Use the same generation panel as single image but adapted for multi-image
         from webui.single_image_ui import SingleImageUI

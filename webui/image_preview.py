@@ -9,6 +9,7 @@ and reactively updates when props change.
 import streamlit as st
 from PIL import Image
 import hashlib
+import time
 from typing import Optional, Callable, Union
 from io import BytesIO
 
@@ -144,17 +145,13 @@ class ImagePreview:
         self.on_clear = on_clear
         self.use_container_width = use_container_width
         self.expanded = expanded
-        
-        # Initialize component state in session state if not exists
-        state_key = f"_image_preview_{component_id}"
-        if state_key not in st.session_state:
-            st.session_state[state_key] = {
-                "current_image_hash": None,
-                "render_count": 0,
-                "last_clear_time": None
-            }
-        
-        self.state = st.session_state[state_key]
+
+        # Initialize component state as instance variables
+        self.state = {
+            "current_image_hash": None,
+            "render_count": 0,
+            "last_clear_time": None
+        }
     
     def _detect_image_change(self, image: Optional[Image.Image]) -> bool:
         """Detect if the image prop has changed."""
@@ -196,7 +193,7 @@ class ImagePreview:
                     use_container_width=True
                 ):
                     cleared = True
-                    self.state["last_clear_time"] = st.session_state.get("_last_interaction_time", 0)
+                    self.state["last_clear_time"] = time.time()
                     
                     # Call the on_clear callback if provided
                     if self.on_clear:

@@ -223,6 +223,8 @@ class StateManager(StreamlitStore):
     is_generating: Subscriptable[bool] = Observable("is_generating", False)  # Guaranteed non-None
     resize_width: Subscriptable[int] = Observable("resize_width", 518)  # Guaranteed non-None
     resize_height: Subscriptable[int] = Observable("resize_height", 518)  # Guaranteed non-None
+    multi_images: Subscriptable[object] = Observable("multi_images")
+    preserved_multi_images: Subscriptable[object] = Observable("_preserved_multi_images")
 
     _instance: ClassVar[Optional['StateManager']] = None
 
