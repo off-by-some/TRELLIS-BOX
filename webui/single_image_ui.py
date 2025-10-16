@@ -52,7 +52,7 @@ class SingleImageUI:
         # Handle uploaded image
         if uploaded_file is not None:
             new_image = Image.open(uploaded_file)
-            current_image = StateManager.get_uploaded_image()
+            current_image = StateManager.uploaded_image
 
             if current_image is None or current_image != new_image:
                 StateManager.set_uploaded_image(new_image)
