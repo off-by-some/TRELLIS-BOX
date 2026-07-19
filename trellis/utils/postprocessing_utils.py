@@ -2,14 +2,29 @@ from typing import *
 import numpy as np
 import torch
 import utils3d
-import nvdiffrast.torch as dr
+try:
+    import nvdiffrast.torch as dr
+except ImportError:
+    dr = None
 from tqdm import tqdm
 import trimesh
 import trimesh.visual
-import xatlas
-import pyvista as pv
-from pymeshfix import _meshfix
-import igraph
+try:
+    import xatlas
+except ImportError:
+    xatlas = None
+try:
+    import pyvista as pv
+except ImportError:
+    pv = None
+try:
+    from pymeshfix import _meshfix
+except ImportError:
+    _meshfix = None
+try:
+    import igraph
+except ImportError:
+    igraph = None
 import cv2
 from PIL import Image
 from .random_utils import sphere_hammersley_sequence
@@ -29,6 +44,9 @@ def _fill_holes(
     verbose=False
 ):
     """
+    if igraph is None or _meshfix is None:
+        raise RuntimeError("Hole filling requires igraph and pymeshfix.")
+
     Rasterize a mesh from multiple views and remove invisible faces.
     Also includes postprocessing to:
         1. Remove connected components that are have low visibility.
@@ -210,6 +228,11 @@ def postprocess_mesh(
     verbose: bool = False,
 ):
     """
+    if simplify and simplify_ratio > 0 and pv is None:
+        raise RuntimeError("Mesh simplification requires pyvista.")
+    if fill_holes and (dr is None or igraph is None or _meshfix is None):
+        raise RuntimeError("CUDA hole filling requires nvdiffrast, igraph, and pymeshfix.")
+
     Postprocess a mesh by simplifying, removing invisible faces, and removing isolated pieces.
 
     Args:
@@ -267,6 +290,8 @@ def parametrize_mesh(vertices: np.array, faces: np.array):
         vertices (np.array): Vertices of the mesh. Shape (V, 3).
         faces (np.array): Faces of the mesh. Shape (F, 3).
     """
+    if xatlas is None:
+        raise RuntimeError("Textured GLB export requires xatlas.")
 
     vmapping, indices, uvs = xatlas.parametrize(vertices, faces)
 
@@ -423,6 +448,9 @@ def to_glb(
     verbose: bool = True,
 ) -> trimesh.Trimesh:
     """
+    if dr is None:
+        raise RuntimeError("Textured GLB export requires nvdiffrast, which is only available in the CUDA build.")
+
     Convert a generated asset to a glb file.
 
     Args:

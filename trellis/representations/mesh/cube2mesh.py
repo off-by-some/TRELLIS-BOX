@@ -6,13 +6,73 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION & AFFILIATES is strictly prohibited.
 import torch
+import numpy as np
 from ...modules.sparse import SparseTensor
 from easydict import EasyDict as edict
 from .utils_cube import *
 try:
     from .flexicube import FlexiCubes
-except:
-    print("Please install kaolin and diso to use the mesh extractor.")
+except ImportError:
+    FlexiCubes = None
+
+
+class MarchingCubesMeshExtractor:
+    """Portable mesh extractor used when FlexiCubes/Kaolin is unavailable."""
+
+    def __init__(self, device="cpu"):
+        self.device = torch.device(device)
+
+    def __call__(
+        self,
+        voxelgrid_vertices,
+        scalar_field,
+        cube_idx,
+        resolution,
+        qef_reg_scale=1e-3,
+        weight_scale=0.99,
+        beta=None,
+        alpha=None,
+        gamma_f=None,
+        voxelgrid_colors=None,
+        training=False,
+    ):
+        try:
+            from skimage import measure
+        except ImportError as exc:
+            raise RuntimeError("Portable mesh extraction requires scikit-image.") from exc
+
+        sdf = scalar_field.detach().float().cpu().numpy().reshape(
+            resolution + 1,
+            resolution + 1,
+            resolution + 1,
+        )
+
+        if not (np.nanmin(sdf) <= 0.0 <= np.nanmax(sdf)):
+            return (
+                torch.zeros((0, 3), dtype=torch.float32, device=self.device),
+                torch.zeros((0, 3), dtype=torch.long, device=self.device),
+                torch.zeros((0,), dtype=torch.float32, device=self.device),
+                None,
+            )
+
+        verts_np, faces_np, _, _ = measure.marching_cubes(sdf, level=0.0)
+        verts_np = verts_np.copy()
+        faces_np = faces_np.copy()
+        verts = torch.tensor(verts_np, dtype=torch.float32, device=self.device) / resolution - 0.5
+        faces = torch.tensor(faces_np.astype(np.int64), dtype=torch.long, device=self.device)
+        colors = None
+
+        if voxelgrid_colors is not None and verts.numel():
+            color_grid = torch.sigmoid(voxelgrid_colors).reshape(
+                resolution + 1,
+                resolution + 1,
+                resolution + 1,
+                -1,
+            )
+            nearest = torch.tensor(verts_np, dtype=torch.long, device=color_grid.device).clamp(0, resolution)
+            colors = color_grid[nearest[:, 0], nearest[:, 1], nearest[:, 2]].to(self.device)
+
+        return verts, faces, torch.zeros((0,), dtype=torch.float32, device=self.device), colors
 
 
 class MeshExtractResult:
@@ -66,20 +126,30 @@ class MeshExtractResult:
 
 
 class SparseFeatures2Mesh:
-    def __init__(self, device="cuda", res=64, use_color=True):
+    def __init__(self, device=None, res=64, use_color=True):
         '''
         a model to generate a mesh from sparse features structures using flexicube
         '''
         super().__init__()
-        self.device=device
+        if device is None:
+            from ...utils.device import get_trellis_device
+            device = get_trellis_device()
+        self.device=torch.device(device)
         self.res = res
-        self.mesh_extractor = FlexiCubes(device=device)
         self.sdf_bias = -1.0 / res
+        self.use_color = use_color
+        self._set_device(self.device)
+        self._calc_layout()
+
+    def _set_device(self, device):
+        self.device = torch.device(device)
+        if FlexiCubes is not None:
+            self.mesh_extractor = FlexiCubes(device=self.device)
+        else:
+            self.mesh_extractor = MarchingCubesMeshExtractor(device=self.device)
         verts, cube = construct_dense_grid(self.res, self.device)
         self.reg_c = cube.to(self.device)
         self.reg_v = verts.to(self.device)
-        self.use_color = use_color
-        self._calc_layout()
     
     def _calc_layout(self):
         LAYOUTS = {
@@ -114,6 +184,8 @@ class SparseFeatures2Mesh:
             return the success tag and ni you loss, 
         """
         # add sdf bias to verts_attrs
+        if torch.device(cubefeats.device) != self.device:
+            self._set_device(cubefeats.device)
         coords = cubefeats.coords[:, 1:]
         feats = cubefeats.feats
         

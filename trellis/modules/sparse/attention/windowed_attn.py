@@ -1,5 +1,6 @@
 from typing import *
 import torch
+import torch.nn.functional as F
 import math
 from .. import SparseTensor
 from .. import DEBUG, ATTN
@@ -8,6 +9,8 @@ if ATTN == 'xformers':
     import xformers.ops as xops
 elif ATTN == 'flash_attn':
     import flash_attn
+elif ATTN in ['sdpa', 'naive']:
+    pass
 else:
     raise ValueError(f"Unknown attention module: {ATTN}")
 
@@ -15,6 +18,29 @@ else:
 __all__ = [
     'sparse_windowed_scaled_dot_product_self_attention',
 ]
+
+
+def _naive_sdpa(q, k, v):
+    scale = q.shape[-1] ** -0.5
+    attn = torch.softmax(torch.matmul(q, k.transpose(-2, -1)) * scale, dim=-1)
+    return torch.matmul(attn, v)
+
+
+def _window_attention(qkv_feats, seq_lens):
+    outs = []
+    offset = 0
+    for seq_len in seq_lens:
+        q, k, v = qkv_feats[offset:offset + seq_len].unbind(dim=1)
+        q = q.permute(1, 0, 2).unsqueeze(0)
+        k = k.permute(1, 0, 2).unsqueeze(0)
+        v = v.permute(1, 0, 2).unsqueeze(0)
+        if ATTN == 'sdpa':
+            out = F.scaled_dot_product_attention(q, k, v)
+        else:
+            out = _naive_sdpa(q, k, v)
+        outs.append(out.squeeze(0).permute(1, 0, 2))
+        offset += seq_len
+    return torch.cat(outs, dim=0) if outs else qkv_feats.new_empty((0, qkv_feats.shape[2], qkv_feats.shape[3]))
 
 
 def calc_window_partition(
@@ -110,6 +136,8 @@ def sparse_windowed_scaled_dot_product_self_attention(
             out = xops.memory_efficient_attention(q, k, v)          # [B, N, H, C]
         elif ATTN == 'flash_attn':
             out = flash_attn.flash_attn_qkvpacked_func(qkv_feats)   # [B, N, H, C]
+        elif ATTN in ['sdpa', 'naive']:
+            out = _window_attention(qkv_feats.reshape(B * N, 3, H, C), seq_lens).reshape(B, N, H, C)
         else:
             raise ValueError(f"Unknown attention module: {ATTN}")
         out = out.reshape(B * N, H, C)                              # [M, H, C]
@@ -125,6 +153,8 @@ def sparse_windowed_scaled_dot_product_self_attention(
             cu_seqlens = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(seq_lens), dim=0)], dim=0) \
                         .to(qkv.device).int()
             out = flash_attn.flash_attn_varlen_qkvpacked_func(qkv_feats, cu_seqlens, max(seq_lens)) # [M, H, C]
+        elif ATTN in ['sdpa', 'naive']:
+            out = _window_attention(qkv_feats, seq_lens)
 
     out = out[bwd_indices]      # [T, H, C]
 

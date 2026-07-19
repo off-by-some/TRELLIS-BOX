@@ -11,6 +11,14 @@ def __detect_available_backend():
     if env_attn_backend is not None and env_attn_backend in ['xformers', 'flash_attn', 'sdpa', 'naive']:
         return env_attn_backend
 
+    try:
+        from trellis.utils.device import get_trellis_device
+        if get_trellis_device().type != 'cuda':
+            import torch
+            return 'sdpa' if hasattr(torch.nn.functional, 'scaled_dot_product_attention') else 'naive'
+    except Exception:
+        pass
+
     # Auto-detect available backends in order of preference
     try:
         import flash_attn
@@ -54,7 +62,7 @@ def __from_env():
 __from_env()
     
 
-def set_backend(backend: Literal['xformers', 'flash_attn']):
+def set_backend(backend: Literal['xformers', 'flash_attn', 'sdpa', 'naive']):
     global BACKEND
     BACKEND = backend
 

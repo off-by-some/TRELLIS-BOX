@@ -19,8 +19,10 @@ To get up and running, you can build the repository to build from source:
 ```bash
 # Clone and run with Docker
 $ git clone https://github.com/off-by-some/TRELLIS-BOX && \
-            cd TRELLIS-BOX && ./trellis.sh run # Add --dev for hot reloading
+            cd TRELLIS-BOX && ./install.sh && ./trellis.sh run # Add --dev for hot reloading
 ```
+
+`./install.sh` auto-detects the best local setup: NVIDIA Docker/CUDA on supported Linux hosts, or experimental portable CPU mode on macOS and non-CUDA machines.
 
 Or if you prefer, pull and run the pre-built Docker image:
 ```
@@ -42,6 +44,7 @@ Here's the current command reference for [trellis.sh](./trellis.sh):
 Usage: ./trellis.sh <command> [options]
 
 Commands:
+  install  - Provision this machine for Docker/CUDA or macOS CPU mode
   run      - Start TRELLIS (builds image, checks GPU, etc.)
   dev      - Quick development mode (requires docker-compose)
   restart  - Restart a stopped TRELLIS container
@@ -55,6 +58,7 @@ Options:
   --diagnostics, -d  Run diagnostics (run command only)
 
 Examples:
+  ./trellis.sh install                # Auto-detect and provision this machine
   ./trellis.sh run                    # Start TRELLIS with full setup
   ./trellis.sh run --dev              # Start in development mode (hot reloading)
   ./trellis.sh dev                    # Quick dev mode (no GPU checks)
@@ -98,6 +102,22 @@ Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimi
 - **Platform**: Linux, macOS, or Windows with Docker Desktop
 - **Storage**: ~20GB free space for models and Docker layers
 - **Nvidia GPU**: Pull requests welcome for additional GPU support!
+
+### Experimental macOS CPU Mode
+
+macOS can run TRELLIS through a portable, mesh-only fallback path. This mode avoids CUDA-only packages and uses dense PyTorch operations for sparse convolutions, so it can be dramatically slower and more memory hungry than the NVIDIA Docker path.
+
+```bash
+./install.sh
+./trellis.sh run --dev
+```
+
+The installer creates `.venv`, installs `requirements.macos.txt`, and writes `.trellis.env` so `trellis.sh` automatically uses the local portable runtime.
+
+Notes:
+- `TRELLIS_DEVICE=auto` uses CUDA when available and otherwise falls back to CPU.
+- CPU/macOS mode generates mesh-only GLB files and software-rendered mesh previews. It skips Gaussian rendering, radiance-field rendering, texture baking, and CUDA hole filling.
+- Portable mode defaults to CPU, not MPS. `./install.sh` writes CPU thread settings into `.trellis.env`; override with `TRELLIS_CPU_THREADS=<n>` before installing if needed.
 
 ### Docker Setup
 1. **Install NVIDIA Container Toolkit** (Linux):

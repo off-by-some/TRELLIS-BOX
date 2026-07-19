@@ -12,6 +12,11 @@ if [ -f ".env" ]; then
     source .env
     set +a
 fi
+if [ -f ".trellis.env" ]; then
+    set -a
+    source .trellis.env
+    set +a
+fi
 
 # Default values (matches docker-compose.yml defaults)
 CUDA_VERSION=${CUDA_VERSION:-12.3.2}
@@ -173,6 +178,92 @@ build_image() {
         print_error "Failed to build image"
         exit 1
     fi
+}
+
+is_portable_runtime() {
+    case "${TRELLIS_DEVICE:-auto}" in
+        cpu|mps)
+            return 0
+            ;;
+    esac
+
+    if [ "$(uname -s)" = "Darwin" ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+detect_cpu_threads() {
+    if [ -n "${TRELLIS_CPU_THREADS:-}" ]; then
+        echo "$TRELLIS_CPU_THREADS"
+        return
+    fi
+
+    if [ "$(uname -s)" = "Darwin" ] && command -v sysctl > /dev/null 2>&1; then
+        sysctl -n hw.physicalcpu 2>/dev/null && return
+    fi
+
+    getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4
+}
+
+configure_cpu_threads() {
+    local cpu_threads
+    cpu_threads="$(detect_cpu_threads)"
+    export TRELLIS_CPU_THREADS=${TRELLIS_CPU_THREADS:-$cpu_threads}
+    export OMP_NUM_THREADS=${OMP_NUM_THREADS:-$cpu_threads}
+    export MKL_NUM_THREADS=${MKL_NUM_THREADS:-$cpu_threads}
+    export VECLIB_MAXIMUM_THREADS=${VECLIB_MAXIMUM_THREADS:-$cpu_threads}
+    export NUMEXPR_NUM_THREADS=${NUMEXPR_NUM_THREADS:-$cpu_threads}
+    export TORCH_NUM_THREADS=${TORCH_NUM_THREADS:-$cpu_threads}
+}
+
+start_portable_local() {
+    print_status "Starting TRELLIS in portable local mode"
+    print_warning "Portable mode is experimental, mesh-only, and can be very slow."
+
+    configure_cpu_threads
+    export TRELLIS_DEVICE=${TRELLIS_DEVICE:-cpu}
+    export SPARSE_BACKEND=${SPARSE_BACKEND:-torch}
+    export ATTN_BACKEND=${ATTN_BACKEND:-sdpa}
+    if [ -z "${TRELLIS_OUTPUT_DIR}" ] || [[ "${TRELLIS_OUTPUT_DIR}" == /app/* ]]; then
+        export TRELLIS_OUTPUT_DIR=./outputs
+    fi
+    if [ -z "${U2NET_HOME}" ] || [[ "${U2NET_HOME}" == /app/* ]]; then
+        export U2NET_HOME=./rembg_cache
+    fi
+    export STREAMLIT_SERVER_ADDRESS=${STREAMLIT_SERVER_ADDRESS:-0.0.0.0}
+    export STREAMLIT_SERVER_HEADLESS=${STREAMLIT_SERVER_HEADLESS:-true}
+
+    mkdir -p "$TRELLIS_OUTPUT_DIR"
+    mkdir -p "$U2NET_HOME"
+
+    PYTHON_BIN=${PYTHON_BIN:-python3}
+    if ! command -v "$PYTHON_BIN" > /dev/null 2>&1; then
+        print_error "Python executable not found: $PYTHON_BIN"
+        print_error "Create a macOS environment first, then try again:"
+        print_error "  python3.10 -m venv .venv && source .venv/bin/activate"
+        print_error "  pip install -r requirements.macos.txt"
+        exit 1
+    fi
+
+    if ! "$PYTHON_BIN" -c "import streamlit" > /dev/null 2>&1; then
+        print_error "Streamlit is not installed in this Python environment."
+        print_error "Install portable dependencies first:"
+        print_error "  pip install -r requirements.macos.txt"
+        exit 1
+    fi
+
+    print_status "Runtime: TRELLIS_DEVICE=${TRELLIS_DEVICE}, SPARSE_BACKEND=${SPARSE_BACKEND}, ATTN_BACKEND=${ATTN_BACKEND}"
+    print_status "CPU threads: ${TORCH_NUM_THREADS}"
+    print_status "Access at: http://localhost:${HOST_PORT}"
+    print_status "Press Ctrl+C to stop"
+    echo ""
+
+    exec "$PYTHON_BIN" -m streamlit run app.py \
+        --server.port "${HOST_PORT}" \
+        --server.address "${STREAMLIT_SERVER_ADDRESS}" \
+        --server.headless "${STREAMLIT_SERVER_HEADLESS}"
 }
 
 # Function to check GPU access
@@ -360,6 +451,10 @@ main() {
                 ;;
         esac
     done
+
+    if is_portable_runtime; then
+        start_portable_local
+    fi
 
     # Check GPU access first
     check_gpu_access

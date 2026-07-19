@@ -160,9 +160,11 @@ cython_debug/
 
 # TRELLIS Docker specific
 outputs/
+rembg_cache/
 ckpts/
 *.safetensor
 *.safetensors
+.trellis.env
 
 # Wheels - only keep valid wheel files, not Git LFS pointers
 # We build nvdiffrast from source in extensions/

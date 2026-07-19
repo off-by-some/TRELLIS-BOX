@@ -9,6 +9,7 @@ import torch
 import streamlit as st
 from pathlib import Path
 from trellis.pipelines import TrellisImageTo3DPipeline
+from trellis.utils.device import empty_device_cache, get_trellis_device, is_cuda_runtime, synchronize_device
 
 # Suppress warnings during pipeline initialization
 warnings.filterwarnings("ignore", message=".*TRANSFORMERS_CACHE.*deprecated.*")
@@ -45,7 +46,7 @@ def cleanup_temp_files(max_age_hours=24):
 
 def defragment_memory():
     """Aggressive memory defragmentation for PyTorch CUDA allocator."""
-    if not torch.cuda.is_available():
+    if not is_cuda_runtime():
         return
 
     for _ in range(3):
@@ -68,15 +69,15 @@ def defragment_memory():
 
 def reduce_memory_usage():
     """Critical memory management: clears cache, forces GC, and optimizes memory layout."""
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+    if is_cuda_runtime():
+        empty_device_cache()
+        synchronize_device()
 
         if hasattr(torch.cuda, 'consolidate_memory'):
             torch.cuda.consolidate_memory()
 
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_device_cache()
+        synchronize_device()
         torch.cuda.reset_peak_memory_stats()
 
         if hasattr(torch.cuda, 'reset_max_memory_allocated'):
@@ -86,8 +87,8 @@ def reduce_memory_usage():
 
         temp = torch.zeros(1, device='cuda')
         del temp
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_device_cache()
+        synchronize_device()
 
     gc.collect(generation=2)
     gc.collect(generation=1)
@@ -107,8 +108,9 @@ def _load_pipeline_internal():
     print("Loading TRELLIS pipeline...")
     reduce_memory_usage()
 
+    device = get_trellis_device()
     pipeline = TrellisImageTo3DPipeline.from_pretrained("JeffreyXiang/TRELLIS-image-large")
-    pipeline.cuda()
+    pipeline.to(device)
     reduce_memory_usage()
 
     # Set models to evaluation mode and convert to half precision where appropriate
@@ -117,7 +119,14 @@ def _load_pipeline_internal():
             model.eval()
 
         if 'flow' in model_name or 'decoder' in model_name:
-            model.half()
+            if device.type == 'cuda':
+                model.half()
+            else:
+                if hasattr(model, 'convert_to_fp32'):
+                    model.convert_to_fp32()
+                model.float()
+                if hasattr(model, 'dtype'):
+                    model.dtype = torch.float32
 
             # Keep norm layers in fp32 for numerical stability
             from trellis.modules.norm import LayerNorm32, GroupNorm32, ChannelLayerNorm32
@@ -132,7 +141,7 @@ def _load_pipeline_internal():
                     module.float()
 
     # Enable cuDNN and CUDA optimizations
-    if torch.cuda.is_available():
+    if device.type == 'cuda':
         torch.backends.cudnn.benchmark = True
         torch.backends.cudnn.enabled = True
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -152,12 +161,14 @@ def _load_pipeline_internal():
         if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
             os.environ['TORCH_USE_CUDA_DSA'] = '1'
 
-    print("TRELLIS pipeline loaded successfully")
-    print(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-    print(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+    print(f"TRELLIS pipeline loaded successfully on {device}")
+    if device.type == 'cuda':
+        print(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+        print(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
 
     reduce_memory_usage()
-    print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
+    if device.type == 'cuda':
+        print(f"GPU Memory after optimization: {torch.cuda.memory_allocated() / 1024**3:.2f} GB allocated, {torch.cuda.memory_reserved() / 1024**3:.2f} GB reserved")
 
     return pipeline
 
@@ -239,4 +250,3 @@ def clear_pipeline_cache():
     # Aggressive memory cleanup
     reduce_memory_usage()
     print("Pipeline cache cleared")
-

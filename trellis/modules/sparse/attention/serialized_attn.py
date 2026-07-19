@@ -1,6 +1,7 @@
 from typing import *
 from enum import Enum
 import torch
+import torch.nn.functional as F
 import math
 from .. import SparseTensor
 from .. import DEBUG, ATTN
@@ -9,6 +10,8 @@ if ATTN == 'xformers':
     import xformers.ops as xops
 elif ATTN == 'flash_attn':
     import flash_attn
+elif ATTN in ['sdpa', 'naive']:
+    pass
 else:
     raise ValueError(f"Unknown attention module: {ATTN}")
 
@@ -31,6 +34,39 @@ SerializeModes = [
     SerializeMode.HILBERT,
     SerializeMode.HILBERT_TRANSPOSED
 ]
+
+
+def _naive_sdpa(q, k, v):
+    scale = q.shape[-1] ** -0.5
+    attn = torch.softmax(torch.matmul(q, k.transpose(-2, -1)) * scale, dim=-1)
+    return torch.matmul(attn, v)
+
+
+def _serialized_attention(qkv_feats, seq_lens):
+    outs = []
+    offset = 0
+    for seq_len in seq_lens:
+        q, k, v = qkv_feats[offset:offset + seq_len].unbind(dim=1)
+        q = q.permute(1, 0, 2).unsqueeze(0)
+        k = k.permute(1, 0, 2).unsqueeze(0)
+        v = v.permute(1, 0, 2).unsqueeze(0)
+        if ATTN == 'sdpa':
+            out = F.scaled_dot_product_attention(q, k, v)
+        else:
+            out = _naive_sdpa(q, k, v)
+        outs.append(out.squeeze(0).permute(1, 0, 2))
+        offset += seq_len
+    return torch.cat(outs, dim=0) if outs else qkv_feats.new_empty((0, qkv_feats.shape[2], qkv_feats.shape[3]))
+
+
+def _fallback_encode(coords: torch.Tensor, permute: List[int]) -> torch.Tensor:
+    coords = coords[:, permute].long()
+    max_coords = coords.max(dim=0).values + 1
+    offsets = torch.cumprod(
+        torch.cat([max_coords.new_ones(1), max_coords.flip(0)[:-1]]),
+        dim=0,
+    ).flip(0)
+    return (coords * offsets).sum(dim=1)
 
 
 def calc_serialization(
@@ -60,19 +96,22 @@ def calc_serialization(
     offsets = [0]
     
     if 'vox2seq' not in globals():
-        import vox2seq
+        try:
+            import vox2seq
+        except ImportError:
+            vox2seq = None
 
     # Serialize the input
     serialize_coords = tensor.coords[:, 1:].clone()
     serialize_coords += torch.tensor(shift_window, dtype=torch.int32, device=tensor.device).reshape(1, 3)
     if serialize_mode == SerializeMode.Z_ORDER:
-        code = vox2seq.encode(serialize_coords, mode='z_order', permute=[0, 1, 2])
+        code = vox2seq.encode(serialize_coords, mode='z_order', permute=[0, 1, 2]) if vox2seq else _fallback_encode(serialize_coords, [0, 1, 2])
     elif serialize_mode == SerializeMode.Z_ORDER_TRANSPOSED:
-        code = vox2seq.encode(serialize_coords, mode='z_order', permute=[1, 0, 2])
+        code = vox2seq.encode(serialize_coords, mode='z_order', permute=[1, 0, 2]) if vox2seq else _fallback_encode(serialize_coords, [1, 0, 2])
     elif serialize_mode == SerializeMode.HILBERT:
-        code = vox2seq.encode(serialize_coords, mode='hilbert', permute=[0, 1, 2])
+        code = vox2seq.encode(serialize_coords, mode='hilbert', permute=[0, 1, 2]) if vox2seq else _fallback_encode(serialize_coords, [0, 1, 2])
     elif serialize_mode == SerializeMode.HILBERT_TRANSPOSED:
-        code = vox2seq.encode(serialize_coords, mode='hilbert', permute=[1, 0, 2])
+        code = vox2seq.encode(serialize_coords, mode='hilbert', permute=[1, 0, 2]) if vox2seq else _fallback_encode(serialize_coords, [1, 0, 2])
     else:
         raise ValueError(f"Unknown serialize mode: {serialize_mode}")
     
@@ -168,6 +207,8 @@ def sparse_serialized_scaled_dot_product_self_attention(
             out = xops.memory_efficient_attention(q, k, v)          # [B, N, H, C]
         elif ATTN == 'flash_attn':
             out = flash_attn.flash_attn_qkvpacked_func(qkv_feats)   # [B, N, H, C]
+        elif ATTN in ['sdpa', 'naive']:
+            out = _serialized_attention(qkv_feats.reshape(B * N, 3, H, C), seq_lens).reshape(B, N, H, C)
         else:
             raise ValueError(f"Unknown attention module: {ATTN}")
         out = out.reshape(B * N, H, C)                              # [M, H, C]
@@ -183,6 +224,8 @@ def sparse_serialized_scaled_dot_product_self_attention(
             cu_seqlens = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(seq_lens), dim=0)], dim=0) \
                         .to(qkv.device).int()
             out = flash_attn.flash_attn_varlen_qkvpacked_func(qkv_feats, cu_seqlens, max(seq_lens)) # [M, H, C]
+        elif ATTN in ['sdpa', 'naive']:
+            out = _serialized_attention(qkv_feats, seq_lens)
 
     out = out[bwd_indices]      # [T, H, C]
 

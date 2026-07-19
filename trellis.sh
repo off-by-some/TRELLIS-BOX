@@ -22,6 +22,7 @@ print_usage() {
     echo "Usage: $0 <command> [options]"
     echo ""
     echo "Commands:"
+    echo "  install  - Provision this machine for Docker/CUDA or macOS CPU mode"
     echo "  run      - Start TRELLIS (builds image, checks GPU, etc.)"
     echo "  dev      - Quick development mode (requires docker-compose)"
     echo "  restart  - Restart a stopped TRELLIS container"
@@ -35,6 +36,7 @@ print_usage() {
     echo "  --diagnostics, -d  Run diagnostics (run command only)"
     echo ""
     echo "Examples:"
+    echo "  $0 install                # Auto-detect and provision this machine"
     echo "  $0 run                    # Start TRELLIS with full setup"
     echo "  $0 run --dev              # Start in development mode (hot reloading)"
     echo "  $0 dev                    # Quick dev mode (no GPU checks)"
@@ -54,6 +56,15 @@ COMMAND="$1"
 
 # Validate command
 case "$COMMAND" in
+    install)
+        SCRIPT="./install.sh"
+        if [ ! -f "$SCRIPT" ]; then
+            print_error "Script '$SCRIPT' not found"
+            exit 1
+        fi
+        shift
+        exec "$SCRIPT" "$@"
+        ;;
     run|restart|stop|status|build|check|dev)
         SCRIPT="scripts/${COMMAND}.sh"
         if [ ! -f "$SCRIPT" ]; then

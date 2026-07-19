@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", message=".*torch.library.impl_abstract.*rename
 warnings.filterwarnings("ignore", message=".*torch.library.register_fake.*")
 
 
-def show_loading_screen(gpu_info="Unknown GPU"):
+def show_loading_screen(gpu_info="Unknown runtime"):
     """Display the loading screen while initializing TRELLIS pipeline."""
     import base64
     from pathlib import Path
@@ -120,7 +120,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
     </style>
     """, unsafe_allow_html=True)
     
-    # Beautiful header banner with GPU info
+    # Beautiful header banner with runtime info
     st.markdown(f"""
     <style>
     @keyframes fadeIn {{
@@ -219,7 +219,7 @@ def show_loading_screen(gpu_info="Unknown GPU"):
             {'<img src="' + banner_img + '" class="banner-image" alt="TRELLIS">' if banner_img else ''}
             <h1 class="loading-title">TRELLIS Pipeline Initialization</h1>
             <p class="loading-subtitle">
-                Loading AI models and CUDA environment<br>
+                Loading AI models and runtime environment<br>
                 <strong>First run may take 2-5 minutes</strong>
             </p>
             <div class="gpu-badge">

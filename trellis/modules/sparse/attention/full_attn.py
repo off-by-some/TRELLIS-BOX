@@ -1,5 +1,6 @@
 from typing import *
 import torch
+import torch.nn.functional as F
 from .. import SparseTensor
 from .. import DEBUG, ATTN
 
@@ -7,6 +8,8 @@ if ATTN == 'xformers':
     import xformers.ops as xops
 elif ATTN == 'flash_attn':
     import flash_attn
+elif ATTN in ['sdpa', 'naive']:
+    pass
 else:
     raise ValueError(f"Unknown attention module: {ATTN}")
 
@@ -14,6 +17,30 @@ else:
 __all__ = [
     'sparse_scaled_dot_product_attention',
 ]
+
+
+def _naive_sdpa(q, k, v):
+    scale = q.shape[-1] ** -0.5
+    attn = torch.softmax(torch.matmul(q, k.transpose(-2, -1)) * scale, dim=-1)
+    return torch.matmul(attn, v)
+
+
+def _segmented_attention(q, k, v, q_seqlen, kv_seqlen):
+    outs = []
+    q_offset = 0
+    kv_offset = 0
+    for q_len, kv_len in zip(q_seqlen, kv_seqlen):
+        q_chunk = q[q_offset:q_offset + q_len].permute(1, 0, 2).unsqueeze(0)
+        k_chunk = k[kv_offset:kv_offset + kv_len].permute(1, 0, 2).unsqueeze(0)
+        v_chunk = v[kv_offset:kv_offset + kv_len].permute(1, 0, 2).unsqueeze(0)
+        if ATTN == 'sdpa':
+            out = F.scaled_dot_product_attention(q_chunk, k_chunk, v_chunk)
+        else:
+            out = _naive_sdpa(q_chunk, k_chunk, v_chunk)
+        outs.append(out.squeeze(0).permute(1, 0, 2))
+        q_offset += q_len
+        kv_offset += kv_len
+    return torch.cat(outs, dim=0) if outs else q.new_empty((0, q.shape[1], v.shape[-1]))
 
 
 @overload
@@ -206,6 +233,12 @@ def sparse_scaled_dot_product_attention(*args, **kwargs):
             out = flash_attn.flash_attn_varlen_kvpacked_func(q, kv, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
         elif num_all_args == 3:
             out = flash_attn.flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
+    elif ATTN in ['sdpa', 'naive']:
+        if num_all_args == 1:
+            q, k, v = qkv.unbind(dim=1)
+        elif num_all_args == 2:
+            k, v = kv.unbind(dim=1)
+        out = _segmented_attention(q, k, v, q_seqlen, kv_seqlen)
     else:
         raise ValueError(f"Unknown attention module: {ATTN}")
     

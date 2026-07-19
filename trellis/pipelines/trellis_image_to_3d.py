@@ -13,6 +13,7 @@ from .base import Pipeline
 from . import samplers
 from ..modules import sparse as sp
 from ..representations import Gaussian, Strivec, MeshExtractResult
+from ..utils.device import empty_device_cache, is_cuda_runtime, synchronize_device
 
 
 def _bhattacharyya_coefficient(p: torch.Tensor, q: torch.Tensor) -> float:
@@ -397,7 +398,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         
         # Free memory
         del z_s, occupancy
-        torch.cuda.empty_cache()
+        empty_device_cache()
         
         return coords
 
@@ -418,16 +419,18 @@ class TrellisImageTo3DPipeline(Pipeline):
             All outputs are converted to fp32 for downstream compatibility
         """
         outputs = {}
+        if not is_cuda_runtime():
+            formats = [fmt for fmt in formats if fmt == 'mesh']
         
         if 'mesh' in formats:
             # Aggressive memory cleanup before mesh decoding (most memory-intensive operation)
             import gc
             gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+            empty_device_cache()
+            synchronize_device()
             
             # Aggressive memory cleanup before mesh decoding (most memory-intensive operation)
-            if torch.cuda.is_available():
+            if is_cuda_runtime():
                 # Multiple cache clears to ensure memory is freed
                 for _ in range(3):
                     torch.cuda.empty_cache()
@@ -445,7 +448,7 @@ class TrellisImageTo3DPipeline(Pipeline):
             outputs['mesh'] = self._convert_to_fp32(mesh)
             
             # Cleanup after mesh decoding
-            torch.cuda.empty_cache()
+            empty_device_cache()
             gc.collect()
         
         if 'gaussian' in formats:
@@ -548,7 +551,7 @@ class TrellisImageTo3DPipeline(Pipeline):
         )[None]
         slat = slat * std + mean
         
-        torch.cuda.empty_cache()
+        empty_device_cache()
         return slat
 
     @torch.no_grad()
@@ -598,8 +601,8 @@ class TrellisImageTo3DPipeline(Pipeline):
         del cond, coords
         import gc
         gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        empty_device_cache()
+        synchronize_device()
         
         return self.decode_slat(slat, formats)
     
@@ -617,7 +620,5 @@ class TrellisImageTo3DPipeline(Pipeline):
             except Exception as e:
                 print(f"Error cleaning up rembg session: {e}")
         
-        # Clear CUDA cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
+        empty_device_cache()
+        synchronize_device()
