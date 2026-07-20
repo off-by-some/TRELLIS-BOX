@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 import base64
 import io
+from tqdm.auto import tqdm
 from trellis2.modules.sparse import SparseTensor
 from trellis2.pipelines import Trellis2ImageTo3DPipeline
 from trellis2.renderers import EnvMap
@@ -33,6 +34,18 @@ MODES = [
 STEPS = 8
 DEFAULT_MODE = 3
 DEFAULT_STEP = 3
+
+
+def enable_download_progress() -> None:
+    try:
+        from huggingface_hub.utils import enable_progress_bars
+        enable_progress_bars()
+    except Exception:
+        pass
+
+
+def startup(message: str) -> None:
+    print(f"[startup] {message}", flush=True)
 
 
 css = """
@@ -624,30 +637,38 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
 
 # Launch the Gradio app
 if __name__ == "__main__":
+    startup("Starting TRELLIS.2 image-to-3D app.")
+    enable_download_progress()
     os.makedirs(TMP_DIR, exist_ok=True)
+    startup(f"Using tmp directory: {TMP_DIR}")
+    startup(f"Using Hugging Face cache: {os.environ.get('HF_HOME', 'default')}")
+    startup(f"Using Triton cache: {os.environ.get('TRITON_CACHE_DIR', 'default')}")
 
     # Construct ui components
     btn_img_base64_strs = {}
-    for i in range(len(MODES)):
-        icon = Image.open(MODES[i]['icon'])
-        MODES[i]['icon_base64'] = image_to_base64(icon)
+    for mode in tqdm(MODES, desc="Loading UI assets", unit="asset"):
+        icon = Image.open(mode['icon'])
+        mode['icon_base64'] = image_to_base64(icon)
 
+    startup("Loading TRELLIS.2 pipeline from microsoft/TRELLIS.2-4B.")
     pipeline = Trellis2ImageTo3DPipeline.from_pretrained('microsoft/TRELLIS.2-4B')
+    startup("Moving pipeline to CUDA.")
     pipeline.cuda()
     
-    envmap = {
-        'forest': EnvMap(torch.tensor(
-            cv2.cvtColor(cv2.imread('assets/hdri/forest.exr', cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
+    envmap = {}
+    for name, path in tqdm(
+        [
+            ('forest', 'assets/hdri/forest.exr'),
+            ('sunset', 'assets/hdri/sunset.exr'),
+            ('courtyard', 'assets/hdri/courtyard.exr'),
+        ],
+        desc="Loading HDRI maps",
+        unit="map",
+    ):
+        envmap[name] = EnvMap(torch.tensor(
+            cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
             dtype=torch.float32, device='cuda'
-        )),
-        'sunset': EnvMap(torch.tensor(
-            cv2.cvtColor(cv2.imread('assets/hdri/sunset.exr', cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
-            dtype=torch.float32, device='cuda'
-        )),
-        'courtyard': EnvMap(torch.tensor(
-            cv2.cvtColor(cv2.imread('assets/hdri/courtyard.exr', cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
-            dtype=torch.float32, device='cuda'
-        )),
-    }
+        ))
     
+    startup("Launching Gradio server.")
     demo.launch(css=css, head=head)

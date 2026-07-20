@@ -1,0 +1,29 @@
+services:
+  v1:
+    environment:
+      STREAMLIT_SERVER_HEADLESS: "false"
+    volumes:
+      - ./TRELLIS/app.py:/app/app.py
+      - ./TRELLIS/trellis:/app/trellis
+      - ./TRELLIS/webui:/app/webui
+      - ./TRELLIS/assets:/app/assets
+
+  v2:
+    environment:
+      GRADIO_DEBUG: "1"
+    volumes:
+      - ./TRELLIS.2/app.py:/app/app.py
+      - ./TRELLIS.2/app_texturing.py:/app/app_texturing.py
+      - ./TRELLIS.2/configs:/app/configs
+      - ./TRELLIS.2/assets:/app/assets
+      - ./TRELLIS.2/trellis2:/app/trellis2
+
+  v2-texture:
+    environment:
+      GRADIO_DEBUG: "1"
+    volumes:
+      - ./TRELLIS.2/app.py:/app/app.py
+      - ./TRELLIS.2/app_texturing.py:/app/app_texturing.py
+      - ./TRELLIS.2/configs:/app/configs
+      - ./TRELLIS.2/assets:/app/assets
+      - ./TRELLIS.2/trellis2:/app/trellis2

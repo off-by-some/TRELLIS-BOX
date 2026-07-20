@@ -55,6 +55,37 @@ Data processing is streamlined for instant conversions that are fully **renderin
 
 ## 🛠️ Installation
 
+### Docker
+
+From this directory, build the low-VRAM image:
+
+```sh
+DOCKER_BUILDKIT=1 docker build \
+  --build-arg APP_UID="$(id -u)" \
+  --build-arg APP_GID="$(id -g)" \
+  -t trellis2-lowvram .
+```
+
+Run the image-to-3D Gradio app:
+
+```sh
+mkdir -p "$HOME/.cache/huggingface" "$HOME/.cache/trellis/triton" tmp outputs
+
+docker run --rm --gpus all \
+  -p 7860:7860 \
+  -e HF_TOKEN="${HF_TOKEN:-}" \
+  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
+  -v "$HOME/.cache/trellis/triton:/home/trellis/.cache/triton" \
+  -v "$(pwd)/tmp:/app/tmp" \
+  -v "$(pwd)/outputs:/app/outputs" \
+  trellis2-lowvram
+```
+
+The Triton cache mount avoids recompiling runtime kernels every time the container starts.
+The container fixes ownership on mounted cache/output directories before it drops to the non-root app user.
+
+TRELLIS.2 uses the gated `facebook/dinov3-vitl16-pretrain-lvd1689m` checkpoint. Request access on Hugging Face, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell.
+
 ### Prerequisites
 - **System**: The code is currently tested only on **Linux**.
 - **Hardware**: An NVIDIA GPU with at least 24GB of memory is necessary. The code has been verified on NVIDIA A100 and H100 GPUs.  

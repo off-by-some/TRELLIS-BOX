@@ -46,10 +46,19 @@ checkpoints/
 *.safetensors
 
 # Training outputs are not needed for inference images.
+data/
+datasets/
 results/
 runs/
 wandb/
 tensorboard/
+
+# Generated media from examples should stay on the host.
+*.glb
+*.obj
+*.ply
+*.mp4
+*.webm
 
 # Docker metadata that is not needed inside the image.
 docker-compose*.yml

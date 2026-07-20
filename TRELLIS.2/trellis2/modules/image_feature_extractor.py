@@ -7,6 +7,26 @@ import numpy as np
 from PIL import Image
 
 
+def explain_gated_hf_model_error(model_name: str, error: Exception) -> None:
+    message = str(error)
+    if "gated repo" not in message.lower() and "401" not in message:
+        return
+
+    print(
+        "\n[startup] Hugging Face authentication is required for this model.",
+        flush=True,
+    )
+    print(
+        f"[startup] Missing access/token for: {model_name}",
+        flush=True,
+    )
+    print(
+        "[startup] Request access in Hugging Face, then run `huggingface-cli login` "
+        "or set `HF_TOKEN` in the repo-root .env file.",
+        flush=True,
+    )
+
+
 class DinoV2FeatureExtractor:
     """
     Feature extractor for DINOv2 models.
@@ -66,7 +86,11 @@ class DinoV3FeatureExtractor:
     """
     def __init__(self, model_name: str, image_size=512):
         self.model_name = model_name
-        self.model = DINOv3ViTModel.from_pretrained(model_name)
+        try:
+            self.model = DINOv3ViTModel.from_pretrained(model_name)
+        except Exception as e:
+            explain_gated_hf_model_error(model_name, e)
+            raise
         self.model.eval()
         self.image_size = image_size
         self.transform = transforms.Compose([

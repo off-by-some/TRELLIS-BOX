@@ -48,13 +48,18 @@ ARG TRELLIS_OUTPUT_DIR=/app/outputs
 # =============================================================================
 # Builder Stage
 # =============================================================================
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn${CUDNN_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn${CUDNN_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS python-deps
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DEFAULT_TIMEOUT=100 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:/usr/local/cuda/bin:${PATH}
 
 # Re-declare ARGs needed in this stage
 ARG PYTHON_VERSION
@@ -75,16 +80,19 @@ apt-get install -y --no-install-recommends \
     git \
     python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-dev \
+    python${PYTHON_VERSION}-venv \
     python3-pip \
     build-essential
 rm -rf /var/lib/apt/lists/*
 EOF
 
+RUN python${PYTHON_VERSION} -m venv "${VIRTUAL_ENV}"
+
 # Upgrade pip and install poetry
-RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -e
-pip install --upgrade pip setuptools wheel
-pip install poetry==${POETRY_VERSION}
+python -m pip install --upgrade pip setuptools wheel packaging
+python -m pip install poetry==${POETRY_VERSION}
 EOF
 
 # Configure poetry
@@ -96,49 +104,54 @@ EOF
 
 # Copy dependency files (including poetry.lock if it exists)
 COPY pyproject.toml poetry.lock* ./
-COPY extensions/ ./extensions/
 
 # Install application dependencies. We keep this separate from the other dependencies to
 # avoid re-installing the same dependencies if kaolin fails to install.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=cache,target=/root/.cache/pypoetry <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    --mount=type=cache,target=/root/.cache/pypoetry,sharing=locked <<EOF
 set -e
 poetry install --only main --no-interaction --no-ansi
 EOF
 
 # Install Kaolin from NVIDIA's repository
-RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -e
-pip install --no-cache-dir \
+python -m pip install \
     --find-links ${KAOLIN_INDEX_URL} \
     kaolin==${KAOLIN_VERSION}
 EOF
 
 # Install flash-attention
-RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -e
-if pip install --no-cache-dir https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl; then
+if python -m pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.0.post2/flash_attn-2.7.0.post2+cu123torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl; then
     echo "Flash attention CUDA 12.3 wheel installed successfully"
-elif pip install --no-cache-dir flash-attn; then
+elif python -m pip install flash-attn; then
     echo "Flash attention wheel installed successfully"
 else
     echo "Flash attention wheel not available, attempting source build..."
-    pip install --no-cache-dir flash-attention
+    python -m pip install flash-attention
 fi
 EOF
 
+COPY wheels/ ./wheels/
+
 # Install diff-gaussian-rasterization (download wheel if not present locally)
-RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -e
-if [ -f "wheels/diff_gaussian_rasterization-*.whl" ]; then
+if compgen -G "wheels/diff_gaussian_rasterization-*.whl" > /dev/null; then
     echo "Installing diff-gaussian-rasterization from local wheel..."
-    pip install --no-cache-dir wheels/diff_gaussian_rasterization-*.whl
+    python -m pip install wheels/diff_gaussian_rasterization-*.whl
 else
     echo "Local wheel not found, downloading from HuggingFace..."
-    pip install --no-cache-dir \
+    python -m pip install \
         https://huggingface.co/spaces/JeffreyXiang/TRELLIS/resolve/main/wheels/diff_gaussian_rasterization-0.0.0-cp310-cp310-linux_x86_64.whl?download=true
 fi
 EOF
+
+FROM python-deps AS builder
+
+COPY extensions/nvdiffrast/ ./extensions/nvdiffrast/
 
 # Build and install nvdiffrast from source (ensures CUDA compatibility)
 # Set TORCH_CUDA_ARCH_LIST to compile for common GPU architectures
@@ -147,10 +160,10 @@ EOF
 # 8.0,8.6 = Ampere (A100, RTX 3090)
 # 8.9 = Ada Lovelace (RTX 4090)
 # 9.0 = Hopper (H100)
-RUN --mount=type=cache,target=/root/.cache/pip <<EOF
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -e
 cd extensions/nvdiffrast
-TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" pip install --no-cache-dir .
+TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST}" python -m pip install .
 EOF
 
 # =============================================================================
@@ -158,11 +171,15 @@ EOF
 # =============================================================================
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn${CUDNN_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Re-declare ARGs needed in runtime stage
 ARG PYTHON_VERSION
 ARG APP_USER
 ARG APP_UID
 ARG APP_PORT
+ARG STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ARG STREAMLIT_SERVER_HEADLESS=true
 ARG CACHE_DIR
 ARG HF_CACHE_DIR
 ARG REMBG_CACHE_DIR
@@ -170,9 +187,10 @@ ARG TRELLIS_OUTPUT_DIR
 
 # Environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
+    VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:${PATH} \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/usr/local/bin:$PATH" \
     APP_PORT=${APP_PORT} \
     CACHE_DIR=${CACHE_DIR} \
     HF_HOME=${HF_CACHE_DIR} \
@@ -194,15 +212,14 @@ set -e
 apt-get update
 apt-get install -y --no-install-recommends \
     python${PYTHON_VERSION} \
-    python3-pip \
     git \
     libgomp1
 rm -rf /var/lib/apt/lists/*
 EOF
 
-# Copy Python packages from builder
-COPY --from=builder /usr/local/lib/python${PYTHON_VERSION}/dist-packages /usr/local/lib/python${PYTHON_VERSION}/dist-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy Python environment from builder. Keeping dependencies in /opt/venv makes
+# the runtime layer independent from system Python package layout.
+COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
 COPY trellis/ ./trellis/

@@ -1,207 +1,287 @@
-# TRELLIS-BOX Docker Guide
+<p align="center">
+<img src="./docs/trellis-box-banner.png" width="100%" height="400px" alt="TRELLIS Docker Banner">
+</p>
 
-This repository contains two containerized TRELLIS projects:
+<p align="center">
+<a href="https://github.com/microsoft/TRELLIS"><img src='https://img.shields.io/badge/TRELLIS-3D_Generation-blue?logo=github&logoColor=white' alt='TRELLIS'></a>
+<a href="https://hub.docker.com/r/cassidybridges/trellis-box"><img src='https://img.shields.io/docker/pulls/cassidybridges/trellis-box?logo=docker&logoColor=white' alt='Docker Pulls'></a>
+<a href="https://pytorch.org"><img src='https://img.shields.io/badge/PyTorch-2.4+-red?logo=pytorch&logoColor=white' alt='PyTorch'></a>
+<a href="#requirements"><img src='https://img.shields.io/badge/GPU-8GB+-green?logo=nvidia&logoColor=white' alt='GPU Required'></a>
+<a href="https://github.com/off-by-some/TRELLIS-BOX/blob/main/LICENSE"><img src='https://img.shields.io/badge/License-MIT-yellow' alt='MIT License'></a>
+</p>
 
-- `TRELLIS/`: the original TRELLIS image-to-3D app, optimized here for lower VRAM usage and GLB export. It runs a Streamlit UI on port `8501`.
-- `TRELLIS.2/`: TRELLIS.2, the newer 4B O-Voxel/PBR pipeline. It runs a Gradio UI on port `7860` and includes low-VRAM flow block offload by default.
+This repository packages Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) image-to-3D pipeline into containers you can actually run on consumer hardware without spending an afternoon fighting dependencies. It ships two apps side by side and a single launcher that runs either one:
 
-Both Docker paths assume an NVIDIA GPU and `nvidia-container-toolkit` are installed on the host.
+- **`TRELLIS/`** — the original Streamlit app, tuned for lower VRAM with FP16 mixed precision (~50% memory savings) and automatic GLB export. Runs at http://localhost:8501.
+- **`TRELLIS.2/`** — the newer O-Voxel/PBR pipeline with a Gradio interface and a dedicated texturing app. Runs at http://localhost:7860.
+
+Pick version 1 when you want the leaner, lower-VRAM workflow. Pick version 2 when you want the newer PBR pipeline and material output. Both expect Docker, an NVIDIA GPU, and the `nvidia-container-toolkit`.
+
+
+## Quickstart
+
+Clone the repo and run whichever version you want from the root:
+
+```bash
+$ git clone https://github.com/off-by-some/TRELLIS-BOX && cd TRELLIS-BOX
+
+$ ./trellis --version 1      # original Streamlit app  → http://localhost:8501
+$ ./trellis --version 2      # newer TRELLIS.2 app     → http://localhost:7860
+```
+
+The first build takes a while — CUDA extensions are compiled from source, and there's no way around that on the initial run. After that it's cached. Model weights download to `~/.cache/huggingface` and are shared between runs, so you only pay that cost once too.
+
+`./trellis` auto-detects the setup that usually just works: your GPU architecture, a sane number of compile jobs, and fallback ports if the defaults are taken. If you'd rather drive Docker yourself, the raw Compose equivalents are there:
+
+```bash
+$ docker compose up --build v1
+$ docker compose up --build v2
+```
+
+
+## CLI Reference
+
+Everything runs through the root-level [`trellis`](./trellis) launcher:
+
+```text
+🚀 TRELLIS Docker Manager
+
+Usage: ./trellis [command] --version <1|2>
+
+Run:
+  --version 1     Start the original TRELLIS (Streamlit, port 8501)
+  --version 2     Start TRELLIS.2 (Gradio, port 7860)
+  -v 2            Short form for --version 2
+  texture         Start the TRELLIS.2 texturing app (port 7861)
+
+Develop:
+  dev -v 1        Run version 1 with source mounted for hot reloading
+  dev -v 2        Run version 2 with source mounted for hot reloading
+  build -v 2      Build the selected image without starting it
+  logs -v 2       Follow logs for the selected app
+
+Manage:
+  ps              Show running containers
+  stop            Stop running containers
+  config          Print the auto-detected configuration
+  check           Verify Docker can see your GPU
+
+Examples:
+  ./trellis --version 1       # start the original app
+  ./trellis -v 2              # start TRELLIS.2
+  ./trellis dev -v 2          # develop against TRELLIS.2 with hot reloading
+  ./trellis build -v 2        # pre-build version 2 without launching
+  ./trellis check             # confirm GPU passthrough works
+```
+
+**Development mode (`dev`)** mounts your source into the container so UI and app changes reload without a rebuild. It's the right way to iterate on the interfaces or debug either app. Core algorithm or CUDA changes still need a fresh image.
+
+
+## Use Cases
+
+<p align="center">
+<img src="./docs/webui-screenshot.png" width="100%" height="600px" alt="TRELLIS Web UI">
+</p>
+
+### Single Image to 3D Model
+Drop in one image and get a textured 3D model back. Backgrounds are removed automatically, and the output is a GLB ready for 3D printing, a game engine, or whatever's next in your pipeline. Good for product shots, character concepts, and quick architectural ideas.
+
+### Multi-View Enhancement
+Feed 2–4 images from different angles when a single viewpoint isn't enough. The pipeline conditions on all of them during sampling, which cuts down artifacts on complex objects — mechanical parts, intricate sculptures, anything with detail that hides from one camera.
+
+### PBR Materials (TRELLIS.2)
+The v2 pipeline produces physically-based materials, and its dedicated texturing app (`./trellis texture`, port 7861) lets you push texture quality further. Reach for this when you care about how the asset looks under real lighting, not just its silhouette.
+
+### Batch and Research Workflows
+Both apps export GLB automatically, which makes them easy to wire into content pipelines or research loops. The FP16 path on v1 keeps things reachable on modest hardware, so you can iterate without an A100 on your desk.
+
 
 ## Requirements
 
-- Docker with BuildKit support.
-- NVIDIA driver compatible with CUDA 12.x.
-- `nvidia-container-toolkit`.
-- Enough disk space for CUDA layers, compiled extensions, and Hugging Face model caches.
+- **Docker** with the NVIDIA Container Toolkit
+- **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended, especially for v2)
+- **Platform**: Linux, macOS, or Windows with Docker Desktop
+- **Storage**: ~20GB free for models and Docker layers
 
-Quick GPU check:
+### Install the NVIDIA Container Toolkit (Linux)
 
+Arch / Manjaro:
 ```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 nvidia-smi
+$ sudo pacman -Syu nvidia-container-toolkit
 ```
 
-Shared model caches are recommended so model downloads survive container rebuilds:
-
+Ubuntu / Debian:
 ```bash
-mkdir -p ~/.cache/huggingface ~/.cache/rembg
+# Add NVIDIA's signed repository
+$ distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
+$ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+   sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+$ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+   sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+$ sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
 ```
 
-## Which Version Should I Run?
-
-Use `TRELLIS/` if you want the original optimized TRELLIS workflow with the existing Streamlit UI and lower baseline VRAM requirements.
-
-Use `TRELLIS.2/` if you want the newer TRELLIS.2 4B O-Voxel pipeline with higher-resolution PBR assets. It is heavier, but this repo enables low-VRAM flow block offload by default.
-
-You can run both at the same time because they use different host ports by default:
-
-- TRELLIS: http://localhost:8501
-- TRELLIS.2: http://localhost:7860
-
-## Run TRELLIS
-
-The easiest path is Docker Compose from inside the `TRELLIS/` directory:
+### Verify GPU access
 
 ```bash
-cd TRELLIS
-cp docker.env.example .env
-docker compose up --build
+$ ./trellis check
 ```
 
-Open http://localhost:8501.
+Or test Docker's GPU passthrough directly:
+```bash
+$ docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
+```
 
-You can also run it directly with Docker:
+
+## Configuration
+
+The defaults are meant to work without any setup. You only need a `.env` file when you want to pin overrides — copy the example and edit what you need:
 
 ```bash
-cd TRELLIS
-DOCKER_BUILDKIT=1 docker build -t trellis-v1 .
-
-docker run --rm --gpus all \
-  -p 8501:8501 \
-  -v "$HOME/.cache/trellis:/home/appuser/.cache" \
-  -v "$HOME/.cache/huggingface:/home/appuser/.cache/huggingface" \
-  -v "$HOME/.cache/rembg:/app/rembg_cache" \
-  -v "$(pwd)/outputs:/app/outputs" \
-  trellis-v1
+$ cp .env.example .env
 ```
 
-Useful TRELLIS helper commands:
+The overrides worth knowing about:
 
 ```bash
-cd TRELLIS
-./trellis.sh run
-./trellis.sh run --dev
-./trellis.sh status
-./trellis.sh stop
+TRELLIS_V1_PORT=8501            # original app port
+TRELLIS_V2_PORT=7860            # TRELLIS.2 app port
+TORCH_CUDA_ARCH_LIST=8.9        # GPU compute capability (usually auto-detected)
+MAX_JOBS=8                      # parallel compile jobs during build
+HOST_UID=1000                   # host user id for writable bind mounts
+HOST_GID=1000                   # host group id for writable bind mounts
+HF_TOKEN=                       # Hugging Face token for gated model downloads
+TRELLIS2_FLOW_BLOCK_OFFLOAD=1   # offload v2 flow blocks to save VRAM
 ```
 
-## Run TRELLIS.2
+The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own. Set it by hand only if detection fails or you're building for a different card than the one you're on:
 
-Build the TRELLIS.2 image:
+| GPU | Value |
+| --- | --- |
+| RTX 3090 / A5000 | `8.6` |
+| RTX 4090 | `8.9` |
+| A100 | `8.0` |
+| H100 | `9.0` |
+
+### Hugging Face Token
+
+TRELLIS.2 loads Facebook DINOv3 as its image encoder, and that checkpoint is gated. Request access to `facebook/dinov3-vitl16-pretrain-lvd1689m` on Hugging Face, then save a local token:
 
 ```bash
-cd TRELLIS.2
-DOCKER_BUILDKIT=1 docker build -t trellis2-lowvram .
+$ huggingface-cli login
 ```
 
-Run the image-to-3D Gradio app:
+After that, `./trellis` automatically reads `~/.cache/huggingface/token` and passes it into Docker. You can also set `HF_TOKEN` directly:
 
 ```bash
-docker run --rm --gpus all \
-  -p 7860:7860 \
-  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
-  -v "$(pwd)/tmp:/app/tmp" \
-  -v "$(pwd)/outputs:/app/outputs" \
-  trellis2-lowvram
+$ cp .env.example .env
+$ $EDITOR .env
 ```
 
-Open http://localhost:7860.
-
-Run the TRELLIS.2 texturing app instead:
+Set:
 
 ```bash
-cd TRELLIS.2
-docker run --rm --gpus all \
-  -p 7860:7860 \
-  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
-  -v "$(pwd)/tmp:/app/tmp" \
-  -v "$(pwd)/outputs:/app/outputs" \
-  trellis2-lowvram python app_texturing.py
+HF_TOKEN=hf_your_token_here
 ```
 
-## Low-VRAM Defaults
+`./trellis config` will say `HF token detected` when it finds one.
 
-`TRELLIS.2/Dockerfile` enables these defaults:
 
-```bash
-TRELLIS2_FLOW_BLOCK_OFFLOAD=1
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-CUDA_MODULE_LOADING=LAZY
-ATTN_BACKEND=flash_attn
-```
+## Outputs and Caches
 
-`TRELLIS2_FLOW_BLOCK_OFFLOAD=1` streams the largest flow transformer blocks onto the GPU one at a time during low-VRAM inference. It preserves model weights, sampling settings, resolution, and output functionality, but it can make sampling slower.
+Each app keeps its generated files in its own directory:
 
-To disable TRELLIS.2 block offload for speed on a large GPU:
+- `TRELLIS/outputs/`
+- `TRELLIS.2/outputs/`
+- `TRELLIS.2/tmp/`
 
-```bash
-docker run --rm --gpus all \
-  -e TRELLIS2_FLOW_BLOCK_OFFLOAD=0 \
-  -p 7860:7860 \
-  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
-  trellis2-lowvram
-```
+Model caches live on the host and are shared across both apps and every run, so nothing gets re-downloaded needlessly:
 
-## GPU Architecture Build Args
+- `~/.cache/huggingface`
+- `~/.cache/rembg`
+- `~/.cache/trellis/triton`
 
-Both projects compile CUDA extensions. To speed builds, set `TORCH_CUDA_ARCH_LIST` for your GPU:
+The launcher creates these directories for you and builds containers with your host UID/GID so mounted caches and outputs stay writable.
 
-```bash
-# RTX 3090 / A5000 class
-DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.6" -t trellis2-lowvram .
-
-# RTX 4090 / Ada
-DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.9" -t trellis2-lowvram .
-
-# A100
-DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.0" -t trellis2-lowvram .
-
-# H100
-DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="9.0" -t trellis2-lowvram .
-```
-
-Run those commands from the project directory you are building, either `TRELLIS/` or `TRELLIS.2/`.
-
-## Ports
-
-Default ports:
-
-| Project | Container port | Host URL |
-| --- | ---: | --- |
-| `TRELLIS/` | `8501` | http://localhost:8501 |
-| `TRELLIS.2/` | `7860` | http://localhost:7860 |
-
-To run two copies of the same app, change only the host-side port:
-
-```bash
-docker run --rm --gpus all -p 7861:7860 trellis2-lowvram
-```
-
-## Updating Images
-
-After changing code or Dockerfiles:
-
-```bash
-cd TRELLIS
-docker compose build --no-cache
-
-cd ../TRELLIS.2
-DOCKER_BUILDKIT=1 docker build --no-cache -t trellis2-lowvram .
-```
-
-Model downloads remain cached if you keep the `~/.cache/huggingface` bind mount.
 
 ## Troubleshooting
 
-If Docker cannot see the GPU, re-check the NVIDIA runtime:
-
+**GPU isn't visible.** Start here:
 ```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 nvidia-smi
+$ ./trellis check
+```
+If that fails, Docker can't see your GPU — recheck the NVIDIA Container Toolkit install above before touching anything else.
+
+**v2 build fails while compiling CUDA extensions.** This is almost always too many parallel jobs eating memory. Lower it:
+```bash
+$ MAX_JOBS=2 ./trellis build -v 2
 ```
 
-If builds fail while compiling CUDA extensions, lower parallelism:
-
+**v2 runs out of VRAM.** Keep flow-block offloading on — it's the default for a reason:
 ```bash
-DOCKER_BUILDKIT=1 docker build --build-arg MAX_JOBS=2 -t trellis2-lowvram TRELLIS.2
+TRELLIS2_FLOW_BLOCK_OFFLOAD=1
+```
+Set it to `0` only when you have VRAM to spare and want the faster inference that comes without offloading.
+
+**v2 cannot write the Triton cache.** Rebuild the image so it has the cache-fixing entrypoint:
+```bash
+$ ./trellis build -v 2
+```
+For direct `docker run` usage, rebuild with the `APP_UID` and `APP_GID` build args shown in [TRELLIS.2/README.md](./TRELLIS.2/README.md).
+
+**General build weirdness.** A clean rebuild clears most of it:
+```bash
+$ ./trellis stop && docker system prune -f && ./trellis build -v 2
 ```
 
-If model downloads fail or are slow, pass a Hugging Face token:
 
-```bash
-docker run --rm --gpus all \
-  -e HF_TOKEN="$HF_TOKEN" \
-  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
-  -p 7860:7860 \
-  trellis2-lowvram
-```
+## How to Contribute
 
-If TRELLIS.2 runs out of VRAM, keep `TRELLIS2_FLOW_BLOCK_OFFLOAD=1`, use the UI's lower resolution option, and close other GPU workloads. The low-VRAM path avoids quality-reducing internal shortcuts; user-selected resolution and sampling settings still control the requested output.
+1. Fork and clone the repo.
+2. Make sure Docker and the NVIDIA Container Toolkit are working (`./trellis check`).
+3. Develop against the app you're changing with source mounted:
+   ```bash
+   $ ./trellis dev -v 1     # or: ./trellis dev -v 2
+   ```
+4. Test the interface at its port (8501 for v1, 7860 for v2) and watch the logs:
+   ```bash
+   $ ./trellis logs -v 2
+   ```
+5. Open a pull request from a feature branch with a clear description and the GPU you tested on.
+
+Bugs and feature requests go in the [issue tracker](https://github.com/off-by-some/TRELLIS-BOX/issues). For anything GPU- or performance-related, include your GPU model, Docker version, and `nvidia-smi` output — it saves a round trip.
+
+
+## Architecture
+
+Both apps share the same core stages, with v2 adding PBR material output:
+
+1. **Image preprocessing** — background removal, cropping, resizing
+2. **Sparse structure generation** — flow-based latent generation
+3. **Structured latent generation** — feature refinement
+4. **Decoding** — mesh, Gaussian, and radiance-field representations (v2 adds O-Voxel/PBR)
+5. **GLB export** — automatic texture baking and export
+
+The memory savings on v1 come from converting transformer models to FP16 while keeping normalization layers in FP32, plus aggressive CUDA cache clearing between stages. On v2, the same pressure is handled by offloading flow blocks (`TRELLIS2_FLOW_BLOCK_OFFLOAD`) so large models fit on smaller cards.
+
+
+## Background
+
+This started because running TRELLIS locally was genuinely painful. The research is excellent, but the setup involved a long chain of platform-specific dependencies that broke in creative ways. Containerizing it fixes the reproducibility problem — the environment is the same everywhere — and the FP16 work on v1 brought the VRAM requirements down far enough that you don't need datacenter hardware to try it.
+
+Adding TRELLIS.2 alongside the original kept that spirit: one launcher, two pipelines, no manual environment surgery. You choose the tradeoff (leaner v1 vs. newer PBR v2) and the tooling handles the rest.
+
+
+## Acknowledgements
+
+I hit a wall running TRELLIS myself until I found [UNES97's trellis-3d-docker project](https://github.com/UNES97/trellis-3d-docker), which gave me the initial Dockerized foundation. Thanks to [@UNES97](https://github.com/UNES97) for doing that groundwork and making TRELLIS reachable for the rest of us.
+
+This project builds on Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) research and its structured 3D latent representations. Full credit to the original researchers for the work everything here depends on — along with the open-source ecosystem underneath it: PyTorch, NVIDIA's CUDA stack, and the wider ML tooling landscape.
+
+
+## License
+
+MIT License. Based on Microsoft's TRELLIS research.

@@ -4,6 +4,10 @@ import os
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
+EIGEN_INCLUDE_DIRS = [
+    os.path.join(ROOT, "third_party/eigen"),
+    os.environ.get("EIGEN_INCLUDE_DIR", "/usr/include/eigen3"),
+]
 
 if BUILD_TARGET == "auto":
     if IS_HIP_EXTENSION:
@@ -53,7 +57,7 @@ setup(
                 "src/ext.cpp",
             ],
             include_dirs=[
-                os.path.join(ROOT, "third_party/eigen"),
+                path for path in EIGEN_INCLUDE_DIRS if path
             ],
             extra_compile_args={
                 "cxx": ["-O3", "-std=c++17"],

@@ -1,0 +1,113 @@
+name: trellis-box
+
+x-nvidia-gpu: &nvidia-gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: ${GPU_COUNT:-all}
+            capabilities: [gpu]
+
+services:
+  v1:
+    <<: *nvidia-gpu
+    build:
+      context: ./TRELLIS
+      dockerfile: Dockerfile
+      args:
+        CUDA_VERSION: ${TRELLIS_V1_CUDA_VERSION:-12.3.2}
+        CUDNN_VERSION: ${TRELLIS_V1_CUDNN_VERSION:-9}
+        UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        POETRY_VERSION: ${POETRY_VERSION:-1.8.3}
+        KAOLIN_VERSION: ${KAOLIN_VERSION:-0.17.0}
+        KAOLIN_INDEX_URL: ${KAOLIN_INDEX_URL:-https://nvidia-kaolin.s3.us-east-2.amazonaws.com/torch-2.4.0_cu121.html}
+        APP_UID: ${HOST_UID:-1000}
+        TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST:-7.0 7.5 8.0 8.6 8.9 9.0}
+    image: trellis-box:v1
+    container_name: trellis-v1
+    ports:
+      - "${TRELLIS_V1_PORT:-8501}:8501"
+    environment:
+      STREAMLIT_SERVER_PORT: 8501
+      STREAMLIT_SERVER_ADDRESS: 0.0.0.0
+      STREAMLIT_SERVER_HEADLESS: "true"
+      HF_HOME: /home/appuser/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /home/appuser/.cache/huggingface
+      TRANSFORMERS_CACHE: /home/appuser/.cache/huggingface
+      U2NET_HOME: /app/rembg_cache
+      TRELLIS_OUTPUT_DIR: /app/outputs
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-all}
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface
+      - ${HOME}/.cache/rembg:/app/rembg_cache
+      - ./TRELLIS/outputs:/app/outputs
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import requests; requests.get('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  v2: &v2
+    <<: *nvidia-gpu
+    build:
+      context: ./TRELLIS.2
+      dockerfile: Dockerfile
+      args:
+        CUDA_VERSION: ${TRELLIS_V2_CUDA_VERSION:-12.4.1}
+        UBUNTU_VERSION: ${UBUNTU_VERSION:-22.04}
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.10}
+        PYTORCH_VERSION: ${PYTORCH_VERSION:-2.6.0}
+        TORCHVISION_VERSION: ${TORCHVISION_VERSION:-0.21.0}
+        PYTORCH_CUDA_INDEX: ${PYTORCH_CUDA_INDEX:-cu124}
+        FLASH_ATTN_VERSION: ${FLASH_ATTN_VERSION:-2.7.3}
+        FLASH_ATTN_WHEEL_URL: ${FLASH_ATTN_WHEEL_URL:-auto}
+        APP_UID: ${HOST_UID:-1000}
+        APP_GID: ${HOST_GID:-1000}
+        MAX_JOBS: ${MAX_JOBS:-8}
+        TORCH_CUDA_ARCH_LIST: ${TORCH_CUDA_ARCH_LIST:-7.5 8.0 8.6 8.9 9.0}
+    image: trellis-box:v2
+    container_name: trellis-v2
+    ports:
+      - "${TRELLIS_V2_PORT:-7860}:7860"
+    environment:
+      GRADIO_SERVER_NAME: 0.0.0.0
+      GRADIO_SERVER_PORT: 7860
+      HF_HOME: /home/trellis/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /home/trellis/.cache/huggingface/hub
+      TRANSFORMERS_CACHE: /home/trellis/.cache/huggingface/transformers
+      TRITON_CACHE_DIR: /home/trellis/.cache/triton
+      TRELLIS2_FLOW_BLOCK_OFFLOAD: ${TRELLIS2_FLOW_BLOCK_OFFLOAD:-1}
+      PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
+      CUDA_MODULE_LOADING: LAZY
+      ATTN_BACKEND: ${ATTN_BACKEND:-flash_attn}
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-all}
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - ${HOME}/.cache/huggingface:/home/trellis/.cache/huggingface
+      - ${HOME}/.cache/trellis/triton:/home/trellis/.cache/triton
+      - ./TRELLIS.2/tmp:/app/tmp
+      - ./TRELLIS.2/outputs:/app/outputs
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"GRADIO_SERVER_PORT\", \"7860\")}/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  v2-texture:
+    <<: *v2
+    profiles: ["extras"]
+    container_name: trellis-v2-texture
+    ports:
+      - "${TRELLIS_V2_TEXTURE_PORT:-7861}:7860"
+    command: ["python", "app_texturing.py"]

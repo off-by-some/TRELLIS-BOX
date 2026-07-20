@@ -9,12 +9,25 @@ import torch
 import numpy as np
 import trimesh
 from PIL import Image
+from tqdm.auto import tqdm
 from trellis2.pipelines import Trellis2TexturingPipeline
 from trellis2.utils.device import cleanup_memory
 
 
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
+
+
+def enable_download_progress() -> None:
+    try:
+        from huggingface_hub.utils import enable_progress_bars
+        enable_progress_bars()
+    except Exception:
+        pass
+
+
+def startup(message: str) -> None:
+    print(f"[startup] {message}", flush=True)
 
 
 def start_session(req: gr.Request):
@@ -145,9 +158,21 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
 
 # Launch the Gradio app
 if __name__ == "__main__":
+    startup("Starting TRELLIS.2 texturing app.")
+    enable_download_progress()
     os.makedirs(TMP_DIR, exist_ok=True)
+    startup(f"Using tmp directory: {TMP_DIR}")
+    startup(f"Using Hugging Face cache: {os.environ.get('HF_HOME', 'default')}")
+    startup(f"Using Triton cache: {os.environ.get('TRITON_CACHE_DIR', 'default')}")
 
-    pipeline = Trellis2TexturingPipeline.from_pretrained('microsoft/TRELLIS.2-4B', config_file="texturing_pipeline.json")
-    pipeline.cuda()
+    with tqdm(total=3, desc="Starting texturing app", unit="step") as pbar:
+        startup("Loading TRELLIS.2 texturing pipeline from microsoft/TRELLIS.2-4B.")
+        pipeline = Trellis2TexturingPipeline.from_pretrained('microsoft/TRELLIS.2-4B', config_file="texturing_pipeline.json")
+        pbar.update(1)
+        startup("Moving pipeline to CUDA.")
+        pipeline.cuda()
+        pbar.update(1)
+        startup("Launching Gradio server.")
+        pbar.update(1)
     
     demo.launch()

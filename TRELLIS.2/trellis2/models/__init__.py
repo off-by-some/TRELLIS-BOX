@@ -46,24 +46,34 @@ def from_pretrained(path: str, **kwargs):
     """
     import os
     import json
+    from tqdm.auto import tqdm
     from safetensors.torch import load_file
+    progress_name = kwargs.pop("_progress_name", path)
     is_local = os.path.exists(f"{path}.json") and os.path.exists(f"{path}.safetensors")
 
-    if is_local:
-        config_file = f"{path}.json"
-        model_file = f"{path}.safetensors"
-    else:
-        from huggingface_hub import hf_hub_download
-        path_parts = path.split('/')
-        repo_id = f'{path_parts[0]}/{path_parts[1]}'
-        model_name = '/'.join(path_parts[2:])
-        config_file = hf_hub_download(repo_id, f"{model_name}.json")
-        model_file = hf_hub_download(repo_id, f"{model_name}.safetensors")
+    with tqdm(total=4, desc=f"Preparing {progress_name}", unit="step", leave=False) as pbar:
+        if is_local:
+            config_file = f"{path}.json"
+            model_file = f"{path}.safetensors"
+        else:
+            from huggingface_hub import hf_hub_download
+            path_parts = path.split('/')
+            repo_id = f'{path_parts[0]}/{path_parts[1]}'
+            model_name = '/'.join(path_parts[2:])
+            config_file = hf_hub_download(repo_id, f"{model_name}.json")
+            pbar.update(1)
+            model_file = hf_hub_download(repo_id, f"{model_name}.safetensors")
+            pbar.update(1)
 
-    with open(config_file, 'r') as f:
-        config = json.load(f)
-    model = __getattr__(config['name'])(**config['args'], **kwargs)
-    model.load_state_dict(load_file(model_file), strict=False)
+        if is_local:
+            pbar.update(2)
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        model = __getattr__(config['name'])(**config['args'], **kwargs)
+        pbar.update(1)
+        model.load_state_dict(load_file(model_file), strict=False)
+        pbar.update(1)
 
     return model
 
