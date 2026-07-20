@@ -17,7 +17,7 @@ It ships two apps side by side and a single launcher that runs either one:
 - **`TRELLIS/`** — the original Streamlit app, tuned for lower VRAM with FP16 mixed precision (~50% memory savings) and automatic GLB export. Runs at http://localhost:8501.
 - **`TRELLIS.2/`** — the newer O-Voxel/PBR pipeline with a Gradio interface and a dedicated texturing app. Runs at http://localhost:7860.
 
-Pick version 1 when you want the leaner, lower-VRAM workflow. Pick version 2 when you want the newer PBR pipeline and material output. Both expect Docker, an NVIDIA GPU, and the `nvidia-container-toolkit`.
+**Both builds are tuned for high-quality generation on GPUs with as little as 12 GB of VRAM.** They achieve this by favoring memory efficiency over maximum speed, while Microsoft’s upstream configuration typically assumes 24 GB of VRAM or more. Docker, an NVIDIA GPU, and the NVIDIA Container Toolkit are required.
 
 
 ## Quickstart
