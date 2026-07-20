@@ -1,335 +1,207 @@
-<p align="center">
-<img src="./docs/trellis-docker-image.png" width="100%" height="400px" alt="TRELLIS Docker Banner">
-</p>
+# TRELLIS-BOX Docker Guide
 
-<p align="center">
-<a href="https://github.com/microsoft/TRELLIS"><img src='https://img.shields.io/badge/TRELLIS-3D_Generation-blue?logo=github&logoColor=white' alt='TRELLIS'></a>
-<a href="https://hub.docker.com/r/cassidybridges/trellis-box"><img src='https://img.shields.io/docker/pulls/cassidybridges/trellis-box?logo=docker&logoColor=white' alt='Docker Pulls'></a>
-<a href="https://pytorch.org"><img src='https://img.shields.io/badge/PyTorch-2.4+-red?logo=pytorch&logoColor=white' alt='PyTorch'></a>
-<a href="#requirements"><img src='https://img.shields.io/badge/GPU-8GB+-green?logo=nvidia&logoColor=white' alt='GPU Required'></a>
-<a href="https://github.com/off-by-some/TRELLIS-BOX/blob/main/LICENSE"><img src='https://img.shields.io/badge/License-MIT-yellow' alt='MIT License'></a>
-</p>
+This repository contains two containerized TRELLIS projects:
 
-This repository hosts a containerized implementation of Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) image-to-3D generation pipeline. Here we've optimized it with FP16 mixed precision support for efficient GPU usage and automatic GLB export capabilities. It enables users to generate high-quality 3D models from single images or multi-view inputs through a simple web interface, reducing VRAM requirements by ~50% while maintaining generation quality.
+- `TRELLIS/`: the original TRELLIS image-to-3D app, optimized here for lower VRAM usage and GLB export. It runs a Streamlit UI on port `8501`.
+- `TRELLIS.2/`: TRELLIS.2, the newer 4B O-Voxel/PBR pipeline. It runs a Gradio UI on port `7860` and includes low-VRAM flow block offload by default.
 
+Both Docker paths assume an NVIDIA GPU and `nvidia-container-toolkit` are installed on the host.
 
-## Quickstart
+## Requirements
 
-To get up and running, you can build the repository to build from source:
-```bash
-# Clone and run with Docker
-$ git clone https://github.com/off-by-some/TRELLIS-BOX && \
-            cd TRELLIS-BOX && ./install.sh && ./trellis.sh run # Add --dev for hot reloading
-```
+- Docker with BuildKit support.
+- NVIDIA driver compatible with CUDA 12.x.
+- `nvidia-container-toolkit`.
+- Enough disk space for CUDA layers, compiled extensions, and Hugging Face model caches.
 
-`./install.sh` auto-detects the best local setup: NVIDIA Docker/CUDA on supported Linux hosts, or experimental portable CPU mode on macOS and non-CUDA machines.
-
-Or if you prefer, pull and run the pre-built Docker image:
-```
-$ docker run --gpus all -it -p 8501:8501 \
-                        -v ~/.cache/trellis-box:/root/.cache \
-                        -v ~/.cache/rembg:/root/.u2net \
-                        -v $(pwd)/outputs:/tmp/Trellis-demo \
-         cassidybridges/trellis-box:latest
-```
-
-Then simply open http://localhost:8501 in your browser to access the web interface. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations. 
-
-
-## CLI Reference
-Here's the current command reference for [trellis.sh](./trellis.sh):
-```text
-🚀 TRELLIS Docker Manager
-
-Usage: ./trellis.sh <command> [options]
-
-Commands:
-  install  - Provision this machine for Docker/CUDA or macOS CPU mode
-  run      - Start TRELLIS (builds image, checks GPU, etc.)
-  dev      - Quick development mode (requires docker-compose)
-  restart  - Restart a stopped TRELLIS container
-  stop     - Stop the running TRELLIS container
-  status   - Show TRELLIS status and system info
-  build    - Build the Docker image only
-  check    - Check GPU memory availability
-
-Options:
-  --dev, -v    Enable development mode with hot reloading
-  --diagnostics, -d  Run diagnostics (run command only)
-
-Examples:
-  ./trellis.sh install                # Auto-detect and provision this machine
-  ./trellis.sh run                    # Start TRELLIS with full setup
-  ./trellis.sh run --dev              # Start in development mode (hot reloading)
-  ./trellis.sh dev                    # Quick dev mode (no GPU checks)
-  ./trellis.sh status                 # Check current status
-  ./trellis.sh stop                   # Stop TRELLIS
-  ./trellis.sh run --diagnostics      # Run GPU diagnostics
-
-```
-
-**Development Mode (with hot reloading):**
-```bash
-$ ./trellis.sh run --dev
-```
-This enables hot reloading for UI and app changes. Perfect for interface development and debugging Streamlit issues. Note: Core algorithm changes require rebuilding the image.
-
-
-
-## Use Cases
-
-<p align="center">
-<img src="./docs/webui-screenshot.png" width="100%" height="600px" alt="TRELLIS Docker Banner">
-</p>
-
-### Single Image to 3D Model
-Transform a single 2D image into a detailed 3D model. Perfect for product visualization, character design, or architectural concepts. The pipeline automatically removes backgrounds and generates textured meshes ready for 3D printing or game engines.
-
-### Multi-View Enhancement
-Upload 2-4 images from different angles to improve generation quality and reduce artifacts. Ideal for complex objects where a single viewpoint isn't sufficient, such as detailed mechanical parts or intricate sculptures.
-
-### Batch Processing Workflows
-Integrate into automated pipelines for content creation studios. Generate multiple 3D assets from image collections with consistent quality and automatic GLB export for seamless import into downstream tools.
-
-### Research and Prototyping
-Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimizations make it accessible for researchers working with limited GPU resources, enabling faster iteration cycles.
-
-## Installation Details
-
-### Prerequisites
-- **Docker**: Install Docker Engine with NVIDIA Container Toolkit support
-- **GPU**: NVIDIA GPU with at least 8GB VRAM (recommended: 16GB+)
-- **Platform**: Linux, macOS, or Windows with Docker Desktop
-- **Storage**: ~20GB free space for models and Docker layers
-- **Nvidia GPU**: Pull requests welcome for additional GPU support!
-
-### Experimental macOS CPU Mode
-
-macOS can run TRELLIS through a portable, mesh-only fallback path. This mode avoids CUDA-only packages and uses dense PyTorch operations for sparse convolutions, so it can be dramatically slower and more memory hungry than the NVIDIA Docker path.
+Quick GPU check:
 
 ```bash
-./install.sh
+docker run --rm --gpus all nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 nvidia-smi
+```
+
+Shared model caches are recommended so model downloads survive container rebuilds:
+
+```bash
+mkdir -p ~/.cache/huggingface ~/.cache/rembg
+```
+
+## Which Version Should I Run?
+
+Use `TRELLIS/` if you want the original optimized TRELLIS workflow with the existing Streamlit UI and lower baseline VRAM requirements.
+
+Use `TRELLIS.2/` if you want the newer TRELLIS.2 4B O-Voxel pipeline with higher-resolution PBR assets. It is heavier, but this repo enables low-VRAM flow block offload by default.
+
+You can run both at the same time because they use different host ports by default:
+
+- TRELLIS: http://localhost:8501
+- TRELLIS.2: http://localhost:7860
+
+## Run TRELLIS
+
+The easiest path is Docker Compose from inside the `TRELLIS/` directory:
+
+```bash
+cd TRELLIS
+cp docker.env.example .env
+docker compose up --build
+```
+
+Open http://localhost:8501.
+
+You can also run it directly with Docker:
+
+```bash
+cd TRELLIS
+DOCKER_BUILDKIT=1 docker build -t trellis-v1 .
+
+docker run --rm --gpus all \
+  -p 8501:8501 \
+  -v "$HOME/.cache/trellis:/home/appuser/.cache" \
+  -v "$HOME/.cache/huggingface:/home/appuser/.cache/huggingface" \
+  -v "$HOME/.cache/rembg:/app/rembg_cache" \
+  -v "$(pwd)/outputs:/app/outputs" \
+  trellis-v1
+```
+
+Useful TRELLIS helper commands:
+
+```bash
+cd TRELLIS
+./trellis.sh run
 ./trellis.sh run --dev
+./trellis.sh status
+./trellis.sh stop
 ```
 
-The installer creates `.venv`, installs `requirements.macos.txt`, and writes `.trellis.env` so `trellis.sh` automatically uses the local portable runtime.
+## Run TRELLIS.2
 
-Notes:
-- `TRELLIS_DEVICE=auto` uses CUDA when available and otherwise falls back to CPU.
-- CPU/macOS mode generates mesh-only GLB files and software-rendered mesh previews. It skips Gaussian rendering, radiance-field rendering, texture baking, and CUDA hole filling.
-- Portable mode defaults to CPU, not MPS. `./install.sh` writes CPU thread settings into `.trellis.env`; override with `TRELLIS_CPU_THREADS=<n>` before installing if needed.
+Build the TRELLIS.2 image:
 
-### Docker Setup
-1. **Install NVIDIA Container Toolkit** (Linux):
-   
-   If you're running Arch/Manjaro:
-   ```bash
-   $ sudo pacman -Syu nvidia-container-toolkit
-
-   ```
-
-   Ubuntu / Debian,
-   ```bash
-   # First add the NVIDIA container toolkit repository
-   $ distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
-   $ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-      sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-   # This ensures the packages you install are from NVIDIA’s repository, properly signed. 
-   $ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-                sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] \
-                https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-   # Update & install the toolkit
-   $ sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-
-   ```
-
-2. **Verify GPU access**:
-   ```bash
-   # Quick test
-   docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
-   ```
-
-### Custom Build (Optional)
-For development or custom modifications, build from source:
 ```bash
-./scripts/build.sh  # Build the Docker image
-./scripts/run.sh    # Start the container
+cd TRELLIS.2
+DOCKER_BUILDKIT=1 docker build -t trellis2-lowvram .
 ```
 
-### Remote GPU Setup
-If running on a remote GPU machine (like via SSH), ensure proper GPU access:
+Run the image-to-3D Gradio app:
 
-1. **SSH into your GPU machine:**
-   ```bash
-   ssh user@your-gpu-server-ip
-   ```
-
-2. **Verify GPU access:**
-   ```bash
-   ./scripts/check_gpu.sh
-   ```
-
-3. **Run TRELLIS:**
-   ```bash
-   ./scripts/run.sh
-   ```
-
-4. **Access the web interface:**
-   - Local: http://localhost:8501
-   - Remote: http://your-gpu-server-ip:8501 (ensure firewall allows port 8501)
-
-### Publishing to Docker Hub
-To share your image on Docker Hub:
 ```bash
-# Publish with version tag
-./scripts/publish.sh v1.0.0
-
-# Or publish as latest
-./scripts/publish.sh latest
+docker run --rm --gpus all \
+  -p 7860:7860 \
+  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
+  -v "$(pwd)/tmp:/app/tmp" \
+  -v "$(pwd)/outputs:/app/outputs" \
+  trellis2-lowvram
 ```
-The script will prompt for your Docker Hub username and handle login if needed.
 
-## How to Contribute
+Open http://localhost:7860.
 
-### Development Setup
-1. Fork and clone the repository
-2. Ensure Docker and NVIDIA Container Toolkit are installed
-3. Build the development image:
-   ```bash
-   ./trellis.sh build
-   ```
-4. Start the container in development mode:
-   ```bash
-   ./trellis.sh run
-   ```
+Run the TRELLIS.2 texturing app instead:
 
-### Testing Changes
-- Modify `app.py` or other source files
-- Restart the container: `./trellis.sh restart`
-- Test the web interface at http://localhost:8501
-- Check Docker logs: `docker logs trellis-box`
-
-### Pull Request Process
-1. Create a feature branch from `main`
-2. Make your changes with clear commit messages
-3. Test thoroughly with different GPU configurations
-4. Submit a pull request with a detailed description
-5. Address any review feedback
-
-### Reporting Issues
-- Use the [issue tracker](https://github.com/off-by-some/TRELLIS-BOX/issues) for bugs and feature requests
-- Include your GPU model, Docker version, and error logs
-- For performance issues, include `nvidia-smi` output
-
-## Usage
-
-### Single Image Generation
-Upload one image to generate a 3D model. Background removal is applied automatically with quality preservation.
-
-### Multi-View Generation
-Upload 2-4 images from different angles. The pipeline cycles through images during sampling for improved conditioning.
-
-## Enhanced Features
-
-### Image Processing
-- Optional image refinement using SSD-1B after background removal (runs on CPU to avoid GPU memory conflicts)
-- Automatic image resizing with multiple preset resolutions (392px to 1022px)
-- Real-time preview of processed images before generation
-
-### Quality Presets
-- Fast (Low Quality): Quick generation with reduced detail
-- Balanced: Standard quality settings for most use cases
-- High Quality (Recommended): Enhanced quality for detailed objects
-- Maximum Quality (Slow): Highest quality with maximum detail
-
-### GLB Export Settings
-- Mesh quality presets: Low, Medium, High, Premium
-- Configurable mesh simplification ratios (0.8-0.99)
-- Adjustable texture sizes (256px to 4096px)
-- Customizable hole filling resolution and view counts
-
-## Configuration
-
-### Configuration
-The Docker image is fully configurable via build arguments and environment variables. See the [Docker Configuration Guide](docs/DOCKER_CONFIGURATION.md) for more detailed instructions & configurations.
-
-
-
-### Environment Variables
 ```bash
-# Memory optimization
-PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
-
-# FP16 precision
-TORCH_USE_CUDA_DSA=1
+cd TRELLIS.2
+docker run --rm --gpus all \
+  -p 7860:7860 \
+  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
+  -v "$(pwd)/tmp:/app/tmp" \
+  -v "$(pwd)/outputs:/app/outputs" \
+  trellis2-lowvram python app_texturing.py
 ```
 
-### Generation Parameters
-Adjust in `app.py`:
-- `DEFAULT_SS_STEPS`: Sparse structure sampling steps (default: 12)
-- `DEFAULT_SLAT_STEPS`: Structured latent sampling steps (default: 12)
-- `DEFAULT_SS_GUIDANCE`: Sparse structure guidance strength (default: 7.5)
-- `DEFAULT_SLAT_GUIDANCE`: SLAT guidance strength (default: 3.0)
+## Low-VRAM Defaults
+
+`TRELLIS.2/Dockerfile` enables these defaults:
+
+```bash
+TRELLIS2_FLOW_BLOCK_OFFLOAD=1
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+CUDA_MODULE_LOADING=LAZY
+ATTN_BACKEND=flash_attn
+```
+
+`TRELLIS2_FLOW_BLOCK_OFFLOAD=1` streams the largest flow transformer blocks onto the GPU one at a time during low-VRAM inference. It preserves model weights, sampling settings, resolution, and output functionality, but it can make sampling slower.
+
+To disable TRELLIS.2 block offload for speed on a large GPU:
+
+```bash
+docker run --rm --gpus all \
+  -e TRELLIS2_FLOW_BLOCK_OFFLOAD=0 \
+  -p 7860:7860 \
+  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
+  trellis2-lowvram
+```
+
+## GPU Architecture Build Args
+
+Both projects compile CUDA extensions. To speed builds, set `TORCH_CUDA_ARCH_LIST` for your GPU:
+
+```bash
+# RTX 3090 / A5000 class
+DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.6" -t trellis2-lowvram .
+
+# RTX 4090 / Ada
+DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.9" -t trellis2-lowvram .
+
+# A100
+DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="8.0" -t trellis2-lowvram .
+
+# H100
+DOCKER_BUILDKIT=1 docker build --build-arg TORCH_CUDA_ARCH_LIST="9.0" -t trellis2-lowvram .
+```
+
+Run those commands from the project directory you are building, either `TRELLIS/` or `TRELLIS.2/`.
+
+## Ports
+
+Default ports:
+
+| Project | Container port | Host URL |
+| --- | ---: | --- |
+| `TRELLIS/` | `8501` | http://localhost:8501 |
+| `TRELLIS.2/` | `7860` | http://localhost:7860 |
+
+To run two copies of the same app, change only the host-side port:
+
+```bash
+docker run --rm --gpus all -p 7861:7860 trellis2-lowvram
+```
+
+## Updating Images
+
+After changing code or Dockerfiles:
+
+```bash
+cd TRELLIS
+docker compose build --no-cache
+
+cd ../TRELLIS.2
+DOCKER_BUILDKIT=1 docker build --no-cache -t trellis2-lowvram .
+```
+
+Model downloads remain cached if you keep the `~/.cache/huggingface` bind mount.
 
 ## Troubleshooting
 
-### Memory Issues
-- Check GPU memory: `nvidia-smi`
-- Clear cache: `docker exec trellis-box python -c "import torch; torch.cuda.empty_cache()"`
-- Reduce batch size for multi-view inputs
+If Docker cannot see the GPU, re-check the NVIDIA runtime:
 
-### Build Issues
-- Clean rebuild: `./trellis.sh stop && docker system prune -f && ./trellis.sh build`
-- Check Docker logs: `docker logs trellis-box`
+```bash
+docker run --rm --gpus all nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 nvidia-smi
+```
 
-### Model Issues
-- Clear cache: `docker exec trellis-box rm -rf /app/.cache/torch/hub/checkpoints/`
-- Restart: `./trellis.sh restart`
+If builds fail while compiling CUDA extensions, lower parallelism:
 
-## Architecture
+```bash
+DOCKER_BUILDKIT=1 docker build --build-arg MAX_JOBS=2 -t trellis2-lowvram TRELLIS.2
+```
 
-### Pipeline Stages
-1. **Image Preprocessing**: Background removal, cropping, resizing
-2. **Sparse Structure Generation**: Flow-based latent generation
-3. **Structured Latent Generation**: Feature refinement
-4. **Mesh/Gaussian/Radiance Field Decoding**: 3D representation generation
-5. **GLB Export**: Automatic texture baking and export
+If model downloads fail or are slow, pass a Hugging Face token:
 
-### Memory Optimizations
-- FP16 conversion for transformer models
-- FP32 preservation for normalization layers
-- Aggressive CUDA cache clearing
-- Memory defragmentation techniques
+```bash
+docker run --rm --gpus all \
+  -e HF_TOKEN="$HF_TOKEN" \
+  -v "$HOME/.cache/huggingface:/home/trellis/.cache/huggingface" \
+  -p 7860:7860 \
+  trellis2-lowvram
+```
 
-### Multi-View Implementation
-- Cycles through conditioning tensors during sampling
-- Maintains proper tensor shapes and dtypes
-- Compatible with CFG and guidance interval sampling
-
-## Background
-
-This Docker implementation was created to make Microsoft's TRELLIS 3D generation pipeline more accessible to users who prefer containerized deployments. The original TRELLIS research introduced significant advancements in 3D generation quality and versatility, but required complex environment setup and substantial computational resources.
-
-The key motivations for this Docker implementation include:
-
-- **Simplified Deployment**: Traditional TRELLIS setup requires installing numerous dependencies across different platforms, which can be error-prone. Docker containers provide a consistent, reproducible environment.
-
-- **Resource Optimization**: The original implementation could require significant VRAM. FP16 mixed precision optimizations reduce memory requirements by ~50% while maintaining generation quality.
-
-- **Production Readiness**: Containerization enables easier integration into existing workflows, automated deployment pipelines, and scaling across different hardware configurations.
-
-- **Developer Experience**: The web interface and automatic GLB export make the technology more accessible to non-experts while maintaining the full power of the underlying TRELLIS models.
-
-## Acknowledgements
-
-I encountered a lot of issues running TRELLIS for myself, until i found [UNES97's trellis-3d-docker project](https://github.com/UNES97/trellis-3d-docker), which provided the initial Dockerized implementation. Special thanks to [@UNES97](https://github.com/UNES97) for the containerization of TRELLIS, making it accessible for anybody within the community. 
-
-This project builds upon Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) research, which represents a significant advancement in structured 3D latent representations for scalable generation. We gratefully acknowledge the original researchers and their contributions to the field of 3D generation.
-
-Special thanks to the open-source community for the various dependencies that make this implementation possible, including PyTorch, NVIDIA's CUDA ecosystem, and the broader machine learning tooling landscape.
-
-## License
-
-MIT License. Based on Microsoft's TRELLIS research.
+If TRELLIS.2 runs out of VRAM, keep `TRELLIS2_FLOW_BLOCK_OFFLOAD=1`, use the UI's lower resolution option, and close other GPU workloads. The low-VRAM path avoids quality-reducing internal shortcuts; user-selected resolution and sampling settings still control the requested output.

@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# TRELLIS Docker Management Script
+# Main entry point that dispatches to individual scripts
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+}
+
+print_usage() {
+    echo "🚀 TRELLIS Docker Manager"
+    echo ""
+    echo "Usage: $0 <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  install  - Provision this machine for Docker/CUDA or macOS CPU mode"
+    echo "  run      - Start TRELLIS (builds image, checks GPU, etc.)"
+    echo "  dev      - Quick development mode (requires docker-compose)"
+    echo "  restart  - Restart a stopped TRELLIS container"
+    echo "  stop     - Stop the running TRELLIS container"
+    echo "  status   - Show TRELLIS status and system info"
+    echo "  build    - Build the Docker image only"
+    echo "  check    - Check GPU memory availability"
+    echo ""
+    echo "Options:"
+    echo "  --dev, -v    Enable development mode with hot reloading"
+    echo "  --diagnostics, -d  Run diagnostics (run command only)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 install                # Auto-detect and provision this machine"
+    echo "  $0 run                    # Start TRELLIS with full setup"
+    echo "  $0 run --dev              # Start in development mode (hot reloading)"
+    echo "  $0 dev                    # Quick dev mode (no GPU checks)"
+    echo "  $0 status                 # Check current status"
+    echo "  $0 stop                   # Stop TRELLIS"
+    echo "  $0 run --diagnostics      # Run GPU diagnostics"
+}
+
+# Check if scripts directory exists
+if [ ! -d "scripts" ]; then
+    print_error "scripts/ directory not found. Are you in the right directory?"
+    exit 1
+fi
+
+# Get the command
+COMMAND="$1"
+
+# Validate command
+case "$COMMAND" in
+    install)
+        SCRIPT="./install.sh"
+        if [ ! -f "$SCRIPT" ]; then
+            print_error "Script '$SCRIPT' not found"
+            exit 1
+        fi
+        shift
+        exec "$SCRIPT" "$@"
+        ;;
+    run|restart|stop|status|build|check|dev)
+        SCRIPT="scripts/${COMMAND}.sh"
+        if [ ! -f "$SCRIPT" ]; then
+            print_error "Script '$SCRIPT' not found"
+            exit 1
+        fi
+
+        # Execute the script with any additional arguments
+        shift  # Remove the command from arguments
+        exec "$SCRIPT" "$@"
+        ;;
+    "")
+        print_usage
+        exit 1
+        ;;
+    *)
+        print_error "Unknown command: $COMMAND"
+        echo ""
+        print_usage
+        exit 1
+        ;;
+esac

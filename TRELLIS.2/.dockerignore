@@ -1,0 +1,58 @@
+# VCS and editor state
+.git/
+.gitignore
+.gitattributes
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python/build byproducts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+site/
+
+# Local Python environments
+.venv/
+venv/
+env/
+ENV/
+conda/
+
+# Runtime outputs and caches
+tmp/
+outputs/
+rembg_cache/
+.cache/
+cache/
+logs/
+*.log
+
+# Large local checkpoint artifacts should be mounted or downloaded into HF cache.
+ckpts/
+checkpoints/
+*.ckpt
+*.pth
+*.pt
+*.safetensor
+*.safetensors
+
+# Training outputs are not needed for inference images.
+results/
+runs/
+wandb/
+tensorboard/
+
+# Docker metadata that is not needed inside the image.
+docker-compose*.yml
+docker.env*
+.env
+.env.*
