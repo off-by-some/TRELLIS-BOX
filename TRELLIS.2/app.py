@@ -446,14 +446,26 @@ def image_to_3d(
     )
     state = pack_state(latents)
     del latents
+    cleanup_memory(pipeline.device, synchronize=True)
     mesh = outputs[0]
     del outputs
     mesh.simplify(16777216) # nvdiffrast limit
-    images = render_utils.render_snapshot(mesh, resolution=1024, r=2, fov=36, nviews=STEPS, envmap=envmap)
+    cleanup_memory(pipeline.device, synchronize=True)
+    progress(0.92, desc="Rendering preview")
+    images = render_utils.render_snapshot(
+        mesh,
+        resolution=1024,
+        r=2,
+        fov=36,
+        nviews=STEPS,
+        envmap=envmap,
+        cleanup_between_frames=True,
+    )
     del mesh
     cleanup_memory(pipeline.device)
     
     # --- HTML Construction ---
+    progress(0.97, desc="Preparing preview")
     # The Stack of 48 Images
     images_html = ""
     for m_idx, mode in enumerate(MODES):

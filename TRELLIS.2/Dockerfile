@@ -72,6 +72,7 @@ apt-get install -y --no-install-recommends \
     libgomp1 \
     libjpeg-dev \
     libpng-dev \
+    libwebp-dev \
     libx11-6 \
     libxext6 \
     ninja-build \
@@ -107,7 +108,12 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<'EOF'
 set -eux
 python -m pip install --requirement requirements.docker.txt
 python -m pip uninstall -y pillow || true
-python -m pip install --no-binary=:all: pillow-simd
+python -m pip install --no-cache-dir --force-reinstall --no-binary=:all: pillow-simd
+python - <<'PY'
+from PIL import features
+if not features.check("webp"):
+    raise SystemExit("Pillow was built without WebP support")
+PY
 EOF
 
 # README default attention backend is flash-attn. Installing the release wheel
@@ -234,6 +240,9 @@ apt-get install -y --no-install-recommends \
     libgomp1 \
     libjpeg-turbo8 \
     libpng16-16 \
+    libwebp7 \
+    libwebpdemux2 \
+    libwebpmux3 \
     libsm6 \
     libx11-6 \
     libxext6 \

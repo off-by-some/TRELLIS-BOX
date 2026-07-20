@@ -437,8 +437,14 @@ class PbrMeshRenderer:
                     gb_roughness,
                     gb_metallic,
                 ], dim=-1)
-                gb_shaded = torch.stack([
-                    e.shade(
+
+                # Compositing
+                w = (1 - alpha) * gb_alpha
+                depth = torch.where(w > max_w, gb_depth, depth)
+                normal = torch.where(w > max_w, gb_cam_normal, normal)
+                max_w = torch.maximum(max_w, w)
+                for env_idx, e in enumerate(envmap.values()):
+                    gb_shaded = e.shade(
                         pos.unsqueeze(0),
                         gb_normal.unsqueeze(0),
                         gb_basecolor.unsqueeze(0),
@@ -446,15 +452,8 @@ class PbrMeshRenderer:
                         rays_o,
                         specular=True,
                     )[0]
-                    for e in envmap.values()
-                ], dim=0)
-                
-                # Compositing
-                w = (1 - alpha) * gb_alpha
-                depth = torch.where(w > max_w, gb_depth, depth)
-                normal = torch.where(w > max_w, gb_cam_normal, normal)
-                max_w = torch.maximum(max_w, w)
-                shaded += w * gb_shaded
+                    shaded[env_idx] += w * gb_shaded
+                    del gb_shaded
                 alpha += w
         
         # Ambient occulusion
@@ -466,8 +465,10 @@ class PbrMeshRenderer:
                 
         # Background
         if use_envmap_bg:
-            bg = torch.stack([e.sample(rays_d) for e in envmap.values()], dim=0)
-            shaded += (1 - alpha) * bg
+            for env_idx, e in enumerate(envmap.values()):
+                bg = e.sample(rays_d)
+                shaded[env_idx] += (1 - alpha) * bg
+                del bg
         
         for i, k in enumerate(envmap.keys()):
             shaded_key = f"shaded_{k}" if k != '' else "shaded"

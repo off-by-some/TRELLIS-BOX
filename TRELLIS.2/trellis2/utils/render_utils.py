@@ -7,6 +7,7 @@ from PIL import Image
 from ..renderers import MeshRenderer, VoxelRenderer, PbrMeshRenderer
 from ..representations import Mesh, Voxel, MeshWithPbrMaterial, MeshWithVoxel
 from .random_utils import sphere_hammersley_sequence
+from .device import cleanup_memory
 
 
 def yaw_pitch_r_fov_to_extrinsics_intrinsics(yaws, pitchs, rs, fovs):
@@ -65,7 +66,7 @@ def get_renderer(sample, **kwargs):
     return renderer
 
 
-def render_frames(sample, extrinsics, intrinsics, options={}, verbose=True, **kwargs):
+def render_frames(sample, extrinsics, intrinsics, options={}, verbose=True, cleanup_between_frames=False, **kwargs):
     renderer = get_renderer(sample, **options)
     rets = {}
     for j, (extr, intr) in tqdm(enumerate(zip(extrinsics, intrinsics)), total=len(extrinsics), desc='Rendering', disable=not verbose):
@@ -74,6 +75,9 @@ def render_frames(sample, extrinsics, intrinsics, options={}, verbose=True, **kw
             if k not in rets: rets[k] = []
             if v.dim() == 2: v = v[None].repeat(3, 1, 1)
             rets[k].append(np.clip(v.detach().cpu().numpy().transpose(1, 2, 0) * 255, 0, 255).astype(np.uint8))
+        del res
+        if cleanup_between_frames:
+            cleanup_memory(synchronize=True)
     return rets
 
 
@@ -97,13 +101,13 @@ def render_multiview(sample, resolution=512, nviews=30):
     return res['color'], extrinsics, intrinsics
 
 
-def render_snapshot(samples, resolution=512, bg_color=(0, 0, 0), offset=(-16 / 180 * np.pi, 20 / 180 * np.pi), r=10, fov=8, nviews=4, **kwargs):
+def render_snapshot(samples, resolution=512, bg_color=(0, 0, 0), offset=(-16 / 180 * np.pi, 20 / 180 * np.pi), r=10, fov=8, nviews=4, cleanup_between_frames=False, **kwargs):
     yaw = np.linspace(0, 2 * np.pi, nviews, endpoint=False)
     yaw_offset = offset[0]
     yaw = [y + yaw_offset for y in yaw]
     pitch = [offset[1] for _ in range(nviews)]
     extrinsics, intrinsics = yaw_pitch_r_fov_to_extrinsics_intrinsics(yaw, pitch, r, fov)
-    return render_frames(samples, extrinsics, intrinsics, {'resolution': resolution, 'bg_color': bg_color}, **kwargs)
+    return render_frames(samples, extrinsics, intrinsics, {'resolution': resolution, 'bg_color': bg_color}, cleanup_between_frames=cleanup_between_frames, **kwargs)
 
 
 def make_pbr_vis_frames(result, resolution=1024):

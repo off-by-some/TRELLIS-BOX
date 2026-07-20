@@ -15,6 +15,7 @@ def env_flag(name: str, default: bool) -> bool:
 def empty_device_cache() -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
     if _mps_available() and hasattr(torch.mps, "empty_cache"):
         torch.mps.empty_cache()
 
