@@ -63,6 +63,8 @@ From this directory, build the low-VRAM image:
 DOCKER_BUILDKIT=1 docker build \
   --build-arg APP_UID="$(id -u)" \
   --build-arg APP_GID="$(id -g)" \
+  --build-arg INSTALL_SAGEATTENTION=auto \
+  --build-arg SAGEATTENTION_PACKAGE=sageattention==1.0.6 \
   -t trellis2-lowvram .
 ```
 
@@ -83,8 +85,10 @@ docker run --rm --gpus all \
 
 The Triton cache mount avoids recompiling runtime kernels every time the container starts.
 The container fixes ownership on mounted cache/output directories before it drops to the non-root app user.
+Dense attention uses SageAttention on supported GPUs; packed varlen sparse attention uses FlashAttention by default.
+The Dockerfile uses `sageattention==1.0.6` because that is the version currently published on PyPI; override `SAGEATTENTION_PACKAGE` if you want to test a source/GitHub build.
 
-TRELLIS.2 uses the gated `facebook/dinov3-vitl16-pretrain-lvd1689m` checkpoint. Request access on Hugging Face, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell.
+TRELLIS.2 uses the gated `facebook/dinov3-vitl16-pretrain-lvd1689m` checkpoint. Open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell.
 
 ### Prerequisites
 - **System**: The code is currently tested only on **Linux**.

@@ -9,20 +9,38 @@ from PIL import Image
 
 def explain_gated_hf_model_error(model_name: str, error: Exception) -> None:
     message = str(error)
-    if "gated repo" not in message.lower() and "401" not in message:
+    lower_message = message.lower()
+    if (
+        "gated repo" not in lower_message
+        and "401" not in message
+        and "403" not in message
+        and "authorized list" not in lower_message
+    ):
         return
+
+    model_url = f"https://huggingface.co/{model_name}"
+    access_hint = (
+        "Your token was found, but this Hugging Face account has not accepted "
+        "the model license/access terms yet."
+        if "403" in message or "authorized list" in lower_message
+        else "A Hugging Face token with access to this gated model is required."
+    )
 
     print(
         "\n[startup] Hugging Face authentication is required for this model.",
         flush=True,
     )
     print(
-        f"[startup] Missing access/token for: {model_name}",
+        f"[startup] {access_hint}",
         flush=True,
     )
     print(
-        "[startup] Request access in Hugging Face, then run `huggingface-cli login` "
-        "or set `HF_TOKEN` in the repo-root .env file.",
+        f"[startup] Open {model_url} and accept the license/request access.",
+        flush=True,
+    )
+    print(
+        "[startup] Then run `huggingface-cli login` locally or set `HF_TOKEN` "
+        "in the repo-root .env file.",
         flush=True,
     )
 

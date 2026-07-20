@@ -1,6 +1,6 @@
 from typing import *
 
-BACKEND = 'flash_attn' 
+BACKEND = 'sage'
 DEBUG = False
 
 def __from_env():
@@ -12,7 +12,7 @@ def __from_env():
     env_attn_backend = os.environ.get('ATTN_BACKEND')
     env_attn_debug = os.environ.get('ATTN_DEBUG')
     
-    if env_attn_backend is not None and env_attn_backend in ['xformers', 'flash_attn', 'flash_attn_3', 'sdpa', 'naive']:
+    if env_attn_backend is not None and env_attn_backend in ['sage', 'xformers', 'flash_attn', 'flash_attn_3', 'sdpa', 'naive']:
         BACKEND = env_attn_backend
     if env_attn_debug is not None:
         DEBUG = env_attn_debug == '1'
@@ -23,7 +23,7 @@ def __from_env():
 __from_env()
     
 
-def set_backend(backend: Literal['xformers', 'flash_attn']):
+def set_backend(backend: Literal['sage', 'xformers', 'flash_attn', 'flash_attn_3', 'sdpa', 'naive']):
     global BACKEND
     BACKEND = backend
 

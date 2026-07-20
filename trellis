@@ -155,27 +155,47 @@ read_token_file() {
 
     [ -f "${token_file}" ] || return 1
     IFS= read -r token < "${token_file}" || return 1
-    token="${token//[[:space:]]/}"
-    [ -n "${token}" ] || return 1
+    token="$(first_hf_token "${token}")" || return 1
     printf '%s\n' "${token}"
+}
+
+first_hf_token() {
+    grep -Eo 'hf_[A-Za-z0-9]{20,}' <<< "${1:-}" | head -n 1
 }
 
 detect_hf_token() {
     local token
 
     if [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
-        printf '%s\n' "${HUGGING_FACE_HUB_TOKEN}"
-        return 0
+        token="$(first_hf_token "${HUGGING_FACE_HUB_TOKEN}" || true)"
+        if [ -n "${token}" ]; then
+            printf '%s\n' "${token}"
+            return 0
+        fi
     fi
 
     token="$(env_file_value HF_TOKEN || true)"
     if [ -n "${token}" ]; then
-        printf '%s\n' "${token}"
-        return 0
+        token="$(first_hf_token "${token}" || true)"
+        if [ -n "${token}" ]; then
+            printf '%s\n' "${token}"
+            return 0
+        fi
+    fi
+
+    if command -v hf >/dev/null 2>&1; then
+        token="$(first_hf_token "$(hf auth token 2>/dev/null || true)" || true)"
+        if [ -n "${token}" ]; then
+            printf '%s\n' "${token}"
+            return 0
+        fi
     fi
 
     for token_file in \
         "${HF_TOKEN_FILE:-}" \
+        "${HF_TOKEN_PATH:-}" \
+        "${HF_HOME:-${HOME}/.cache/huggingface}/token" \
+        "${XDG_CACHE_HOME:-${HOME}/.cache}/huggingface/token" \
         "${HOME}/.cache/huggingface/token" \
         "${HOME}/.huggingface/token"
     do
@@ -187,7 +207,30 @@ detect_hf_token() {
         fi
     done
 
+    for token_file in \
+        "${HF_HOME:-${HOME}/.cache/huggingface}/stored_tokens" \
+        "${XDG_CACHE_HOME:-${HOME}/.cache}/huggingface/stored_tokens"
+    do
+        [ -f "${token_file}" ] || continue
+        token="$(grep -Eo 'hf_[A-Za-z0-9]{20,}' "${token_file}" | head -n 1 || true)"
+        if [ -n "${token}" ]; then
+            printf '%s\n' "${token}"
+            return 0
+        fi
+    done
+
     return 1
+}
+
+sage_supported_arch() {
+    case "${1:-}" in
+        8.0|8.6|8.9|9.0)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 detect_gpu_arch() {
@@ -262,6 +305,17 @@ configure_auto_env() {
         fi
     fi
 
+    gpu_arch="${TORCH_CUDA_ARCH_LIST:-}"
+    gpu_arch="${gpu_arch%% *}"
+    if [ -z "${ATTN_BACKEND:-}" ] && ! env_file_has ATTN_BACKEND; then
+        if sage_supported_arch "${gpu_arch}"; then
+            export ATTN_BACKEND=sage
+        else
+            export ATTN_BACKEND=flash_attn
+        fi
+    fi
+    set_auto_default SPARSE_ATTN_BACKEND flash_attn
+
     set_auto_port TRELLIS_V1_PORT 8501
     set_auto_port TRELLIS_V2_PORT 7860
     set_auto_port TRELLIS_V2_TEXTURE_PORT 7861
@@ -283,6 +337,12 @@ print_auto_env() {
         parts+=("HF token detected")
     else
         parts+=("HF token missing")
+    fi
+    if [ -n "${ATTN_BACKEND:-}" ]; then
+        parts+=("dense attention=${ATTN_BACKEND}")
+    fi
+    if [ -n "${SPARSE_ATTN_BACKEND:-}" ]; then
+        parts+=("sparse attention=${SPARSE_ATTN_BACKEND}")
     fi
     parts+=("ports 1:${TRELLIS_V1_PORT:-8501} 2:${TRELLIS_V2_PORT:-7860} texture:${TRELLIS_V2_TEXTURE_PORT:-7861}")
 

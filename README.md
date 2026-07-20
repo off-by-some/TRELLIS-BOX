@@ -79,10 +79,6 @@ Examples:
 
 ## Use Cases
 
-<p align="center">
-<img src="./docs/webui-screenshot.png" width="100%" height="600px" alt="TRELLIS Web UI">
-</p>
-
 ### Single Image to 3D Model
 Drop in one image and get a textured 3D model back. Backgrounds are removed automatically, and the output is a GLB ready for 3D printing, a game engine, or whatever's next in your pipeline. Good for product shots, character concepts, and quick architectural ideas.
 
@@ -151,6 +147,10 @@ TRELLIS_V1_PORT=8501            # original app port
 TRELLIS_V2_PORT=7860            # TRELLIS.2 app port
 TORCH_CUDA_ARCH_LIST=8.9        # GPU compute capability (usually auto-detected)
 MAX_JOBS=8                      # parallel compile jobs during build
+ATTN_BACKEND=sage               # dense TRELLIS.2 attention backend
+SPARSE_ATTN_BACKEND=flash_attn  # packed varlen sparse attention backend
+INSTALL_SAGEATTENTION=auto      # install SageAttention when the build arch supports it
+SAGEATTENTION_PACKAGE=sageattention==1.0.6
 HOST_UID=1000                   # host user id for writable bind mounts
 HOST_GID=1000                   # host group id for writable bind mounts
 HF_TOKEN=                       # Hugging Face token for gated model downloads
@@ -168,7 +168,7 @@ The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own.
 
 ### Hugging Face Token
 
-TRELLIS.2 loads Facebook DINOv3 as its image encoder, and that checkpoint is gated. Request access to `facebook/dinov3-vitl16-pretrain-lvd1689m` on Hugging Face, then save a local token:
+TRELLIS.2 loads Facebook DINOv3 as its image encoder, and that checkpoint is gated. Open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access with your Hugging Face account, then save a local token:
 
 ```bash
 $ huggingface-cli login
@@ -188,6 +188,19 @@ HF_TOKEN=hf_your_token_here
 ```
 
 `./trellis config` will say `HF token detected` when it finds one.
+
+### Attention Backends
+
+TRELLIS.2 uses SageAttention for dense attention on supported GPUs and FlashAttention for packed variable-length sparse attention by default:
+
+```bash
+ATTN_BACKEND=sage
+SPARSE_ATTN_BACKEND=flash_attn
+```
+
+The launcher auto-selects `sage` for dense attention on Ampere, Ada, and Hopper GPUs with the current CUDA 12.4 image. `SPARSE_ATTN_BACKEND=sage` is also implemented through `sageattn_varlen`, but the default stays on FlashAttention while that path gets broader real-world testing.
+
+The Docker build defaults to `sageattention==1.0.6` because that is the version currently published on PyPI. You can override `SAGEATTENTION_PACKAGE` with a Git/source package spec later if you want to experiment with a newer upstream release.
 
 
 ## Outputs and Caches

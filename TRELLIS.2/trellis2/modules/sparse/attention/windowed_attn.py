@@ -11,6 +11,48 @@ __all__ = [
 ]
 
 
+_FALLBACK_WARNINGS = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key in _FALLBACK_WARNINGS:
+        return
+    _FALLBACK_WARNINGS.add(key)
+    print(message, flush=True)
+
+
+def _sageattn_varlen_or_flash(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    cu_seqlens_q: torch.Tensor,
+    cu_seqlens_k: torch.Tensor,
+    max_seqlen_q: int,
+    max_seqlen_k: int,
+    flash_func: Callable[[], torch.Tensor],
+) -> torch.Tensor:
+    try:
+        if 'sageattn_varlen' not in globals():
+            from sageattention import sageattn_varlen
+        return sageattn_varlen(
+            q.contiguous(),
+            k.contiguous(),
+            v.contiguous(),
+            cu_seqlens_q.contiguous(),
+            cu_seqlens_k.contiguous(),
+            max_seqlen_q,
+            max_seqlen_k,
+            tensor_layout="NHD",
+            is_causal=False,
+        )
+    except Exception as e:
+        _warn_once(
+            'sage_windowed_sparse_fallback',
+            f"[SPARSE] SageAttention varlen unavailable for this windowed attention call ({e}); falling back to flash_attn.",
+        )
+        return flash_func()
+
+
 def calc_window_partition(
     tensor: SparseTensor,
     window_size: Union[int, Tuple[int, ...]],
@@ -55,7 +97,7 @@ def calc_window_partition(
         attn_func_args = {
             'attn_bias': xops.fmha.BlockDiagonalMask.from_seqlens(seq_lens)
         }
-    elif config.ATTN == 'flash_attn':
+    elif config.ATTN in ['sage', 'flash_attn']:
         attn_func_args = {
             'cu_seqlens': torch.cat([torch.tensor([0], device=tensor.device), torch.cumsum(seq_lens, dim=0)], dim=0).int(),
             'max_seqlen': torch.max(seq_lens)
@@ -109,6 +151,18 @@ def sparse_windowed_scaled_dot_product_self_attention(
         k = k.unsqueeze(0)                                                              # [1, M, H, C]
         v = v.unsqueeze(0)                                                              # [1, M, H, C]
         out = xops.memory_efficient_attention(q, k, v, **attn_func_args)[0]             # [M, H, C]
+    elif config.ATTN == 'sage':
+        if 'flash_attn' not in globals():
+            import flash_attn
+        q, k, v = qkv_feats.unbind(dim=1)
+        out = _sageattn_varlen_or_flash(
+            q, k, v,
+            attn_func_args['cu_seqlens'],
+            attn_func_args['cu_seqlens'],
+            int(attn_func_args['max_seqlen']),
+            int(attn_func_args['max_seqlen']),
+            lambda: flash_attn.flash_attn_varlen_qkvpacked_func(qkv_feats, **attn_func_args),
+        )
     elif config.ATTN == 'flash_attn':
         if 'flash_attn' not in globals():
             import flash_attn
@@ -177,6 +231,25 @@ def sparse_windowed_scaled_dot_product_cross_attention(
         v = v.unsqueeze(0)                                                              # [1, M, H, C]
         mask = xops.fmha.BlockDiagonalMask.from_seqlens(q_seq_lens, kv_seq_lens)
         out = xops.memory_efficient_attention(q, k, v, attn_bias=mask)[0]               # [M, H, C]
+    elif config.ATTN == 'sage':
+        if 'flash_attn' not in globals():
+            import flash_attn
+        k, v = kv_feats.unbind(dim=1)
+        out = _sageattn_varlen_or_flash(
+            q_feats, k, v,
+            q_attn_func_args['cu_seqlens'],
+            kv_attn_func_args['cu_seqlens'],
+            int(q_attn_func_args['max_seqlen']),
+            int(kv_attn_func_args['max_seqlen']),
+            lambda: flash_attn.flash_attn_varlen_kvpacked_func(
+                q_feats,
+                kv_feats,
+                cu_seqlens_q=q_attn_func_args['cu_seqlens'],
+                cu_seqlens_k=kv_attn_func_args['cu_seqlens'],
+                max_seqlen_q=q_attn_func_args['max_seqlen'],
+                max_seqlen_k=kv_attn_func_args['max_seqlen'],
+            ),
+        )
     elif config.ATTN == 'flash_attn':
         if 'flash_attn' not in globals():
             import flash_attn

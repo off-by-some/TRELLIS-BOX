@@ -9,6 +9,16 @@ __all__ = [
 ]
 
 
+_FALLBACK_WARNINGS = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key in _FALLBACK_WARNINGS:
+        return
+    _FALLBACK_WARNINGS.add(key)
+    print(message, flush=True)
+
+
 def _naive_sdpa(q, k, v):
     """
     Naive implementation of scaled dot product attention.
@@ -22,6 +32,27 @@ def _naive_sdpa(q, k, v):
     out = attn_weight @ v
     out = out.permute(0, 2, 1, 3)   # [N, L, H, C]
     return out
+
+
+def _torch_sdpa(q, k, v):
+    if 'sdpa' not in globals():
+        from torch.nn.functional import scaled_dot_product_attention as sdpa
+    q = q.permute(0, 2, 1, 3)   # [N, H, L, C]
+    k = k.permute(0, 2, 1, 3)   # [N, H, L, C]
+    v = v.permute(0, 2, 1, 3)   # [N, H, L, C]
+    out = sdpa(q, k, v)         # [N, H, L, C]
+    out = out.permute(0, 2, 1, 3)   # [N, L, H, C]
+    return out
+
+
+def _flash_attn(q, k, v, qkv=None, kv=None, num_all_args=3):
+    if 'flash_attn' not in globals():
+        import flash_attn
+    if num_all_args == 1:
+        return flash_attn.flash_attn_qkvpacked_func(qkv)
+    if num_all_args == 2:
+        return flash_attn.flash_attn_kvpacked_func(q, kv)
+    return flash_attn.flash_attn_func(q, k, v)
 
 
 @overload
@@ -94,7 +125,25 @@ def scaled_dot_product_attention(*args, **kwargs):
         assert len(v.shape) == 4, f"Invalid shape for v, got {v.shape}, expected [N, L, H, Co]"
         device = q.device    
 
-    if config.BACKEND == 'xformers':
+    if config.BACKEND == 'sage':
+        if num_all_args == 1:
+            q, k, v = qkv.unbind(dim=2)
+        elif num_all_args == 2:
+            k, v = kv.unbind(dim=2)
+        try:
+            if 'sageattn' not in globals():
+                from sageattention import sageattn
+            out = sageattn(q.contiguous(), k.contiguous(), v.contiguous(), tensor_layout="NHD", is_causal=False)
+        except Exception as e:
+            _warn_once(
+                'sage_dense_fallback',
+                f"[ATTENTION] SageAttention unavailable for this dense attention call ({e}); falling back to flash_attn/sdpa.",
+            )
+            try:
+                out = _flash_attn(q, k, v, qkv=qkv if num_all_args == 1 else None, kv=kv if num_all_args == 2 else None, num_all_args=num_all_args)
+            except Exception:
+                out = _torch_sdpa(q, k, v)
+    elif config.BACKEND == 'xformers':
         if 'xops' not in globals():
             import xformers.ops as xops
         if num_all_args == 1:
@@ -103,14 +152,11 @@ def scaled_dot_product_attention(*args, **kwargs):
             k, v = kv.unbind(dim=2)
         out = xops.memory_efficient_attention(q, k, v)
     elif config.BACKEND == 'flash_attn':
-        if 'flash_attn' not in globals():
-            import flash_attn
         if num_all_args == 1:
-            out = flash_attn.flash_attn_qkvpacked_func(qkv)
+            q, k, v = qkv.unbind(dim=2)
         elif num_all_args == 2:
-            out = flash_attn.flash_attn_kvpacked_func(q, kv)
-        elif num_all_args == 3:
-            out = flash_attn.flash_attn_func(q, k, v)
+            k, v = kv.unbind(dim=2)
+        out = _flash_attn(q, k, v, qkv=qkv if num_all_args == 1 else None, kv=kv if num_all_args == 2 else None, num_all_args=num_all_args)
     elif config.BACKEND == 'flash_attn_3':
         if 'flash_attn_3' not in globals():
             import flash_attn_interface as flash_attn_3
@@ -122,17 +168,11 @@ def scaled_dot_product_attention(*args, **kwargs):
             elif num_all_args == 3:
                 out = flash_attn_3.flash_attn_func(q, k, v)
     elif config.BACKEND == 'sdpa':
-        if 'sdpa' not in globals():
-            from torch.nn.functional import scaled_dot_product_attention as sdpa
         if num_all_args == 1:
             q, k, v = qkv.unbind(dim=2)
         elif num_all_args == 2:
             k, v = kv.unbind(dim=2)
-        q = q.permute(0, 2, 1, 3)   # [N, H, L, C]
-        k = k.permute(0, 2, 1, 3)   # [N, H, L, C]
-        v = v.permute(0, 2, 1, 3)   # [N, H, L, C]
-        out = sdpa(q, k, v)         # [N, H, L, C]
-        out = out.permute(0, 2, 1, 3)   # [N, L, H, C]
+        out = _torch_sdpa(q, k, v)
     elif config.BACKEND == 'naive':
         if num_all_args == 1:
             q, k, v = qkv.unbind(dim=2)

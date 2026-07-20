@@ -9,6 +9,41 @@ __all__ = [
 ]
 
 
+_FALLBACK_WARNINGS = set()
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key in _FALLBACK_WARNINGS:
+        return
+    _FALLBACK_WARNINGS.add(key)
+    print(message, flush=True)
+
+
+def _cu_seqlens(seq_lens: List[int], device: torch.device) -> torch.Tensor:
+    return torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(seq_lens), dim=0)]).int().to(device)
+
+
+def _flash_attn_varlen(
+    q: torch.Tensor,
+    k: Optional[torch.Tensor],
+    v: Optional[torch.Tensor],
+    qkv: Optional[torch.Tensor],
+    kv: Optional[torch.Tensor],
+    cu_seqlens_q: torch.Tensor,
+    cu_seqlens_kv: torch.Tensor,
+    max_q_seqlen: int,
+    max_kv_seqlen: int,
+    num_all_args: int,
+) -> torch.Tensor:
+    if 'flash_attn' not in globals():
+        import flash_attn
+    if num_all_args == 1:
+        return flash_attn.flash_attn_varlen_qkvpacked_func(qkv, cu_seqlens_q, max_q_seqlen)
+    if num_all_args == 2:
+        return flash_attn.flash_attn_varlen_kvpacked_func(q, kv, cu_seqlens_q, cu_seqlens_kv, max_q_seqlen, max_kv_seqlen)
+    return flash_attn.flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_kv, max_q_seqlen, max_kv_seqlen)
+
+
 @overload
 def sparse_scaled_dot_product_attention(qkv: VarLenTensor) -> VarLenTensor:
     """
@@ -169,7 +204,46 @@ def sparse_scaled_dot_product_attention(*args, **kwargs):
             k = k.reshape(N * L, H, CI)     # [T_KV, H, Ci]
             v = v.reshape(N * L, H, CO)     # [T_KV, H, Co]
 
-    if config.ATTN == 'xformers':
+    cu_seqlens_q = _cu_seqlens(q_seqlen, device)
+    cu_seqlens_kv = cu_seqlens_q if num_all_args == 1 else _cu_seqlens(kv_seqlen, device)
+    max_q_seqlen = max(q_seqlen)
+    max_kv_seqlen = max(q_seqlen) if num_all_args == 1 else max(kv_seqlen)
+
+    if config.ATTN == 'sage':
+        if num_all_args == 1:
+            q, k, v = qkv.unbind(dim=1)
+        elif num_all_args == 2:
+            k, v = kv.unbind(dim=1)
+        try:
+            if 'sageattn_varlen' not in globals():
+                from sageattention import sageattn_varlen
+            out = sageattn_varlen(
+                q.contiguous(),
+                k.contiguous(),
+                v.contiguous(),
+                cu_seqlens_q.contiguous(),
+                cu_seqlens_kv.contiguous(),
+                max_q_seqlen,
+                max_kv_seqlen,
+                tensor_layout="NHD",
+                is_causal=False,
+            )
+        except Exception as e:
+            _warn_once(
+                'sage_sparse_fallback',
+                f"[SPARSE] SageAttention varlen unavailable for this attention call ({e}); falling back to flash_attn.",
+            )
+            out = _flash_attn_varlen(
+                q, k, v,
+                qkv if num_all_args == 1 else None,
+                kv if num_all_args == 2 else None,
+                cu_seqlens_q,
+                cu_seqlens_kv,
+                max_q_seqlen,
+                max_kv_seqlen,
+                num_all_args,
+            )
+    elif config.ATTN == 'xformers':
         if 'xops' not in globals():
             import xformers.ops as xops
         if num_all_args == 1:
@@ -182,34 +256,25 @@ def sparse_scaled_dot_product_attention(*args, **kwargs):
         mask = xops.fmha.BlockDiagonalMask.from_seqlens(q_seqlen, kv_seqlen)
         out = xops.memory_efficient_attention(q, k, v, mask)[0]
     elif config.ATTN == 'flash_attn':
-        if 'flash_attn' not in globals():
-            import flash_attn
-        cu_seqlens_q = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(q_seqlen), dim=0)]).int().to(device)
-        if num_all_args in [2, 3]:
-            cu_seqlens_kv = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(kv_seqlen), dim=0)]).int().to(device)
-        if num_all_args == 1:
-            out = flash_attn.flash_attn_varlen_qkvpacked_func(qkv, cu_seqlens_q, max(q_seqlen))
-        elif num_all_args == 2:
-            out = flash_attn.flash_attn_varlen_kvpacked_func(q, kv, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
-        elif num_all_args == 3:
-            out = flash_attn.flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_kv, max(q_seqlen), max(kv_seqlen))
+        out = _flash_attn_varlen(
+            q if num_all_args in [2, 3] else None,
+            k if num_all_args == 3 else None,
+            v if num_all_args == 3 else None,
+            qkv if num_all_args == 1 else None,
+            kv if num_all_args == 2 else None,
+            cu_seqlens_q,
+            cu_seqlens_kv,
+            max_q_seqlen,
+            max_kv_seqlen,
+            num_all_args,
+        )
     elif config.ATTN == 'flash_attn_3':
         if 'flash_attn_3' not in globals():
             import flash_attn_interface as flash_attn_3
-        cu_seqlens_q = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(q_seqlen), dim=0)]).int().to(device)
         if num_all_args == 1:
             q, k, v = qkv.unbind(dim=1)
-            cu_seqlens_kv = cu_seqlens_q.clone()
-            max_q_seqlen = max_kv_seqlen = max(q_seqlen)
         elif num_all_args == 2:
             k, v = kv.unbind(dim=1)
-            cu_seqlens_kv = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(kv_seqlen), dim=0)]).int().to(device)
-            max_q_seqlen = max(q_seqlen)
-            max_kv_seqlen = max(kv_seqlen)
-        elif num_all_args == 3:
-            cu_seqlens_kv = torch.cat([torch.tensor([0]), torch.cumsum(torch.tensor(kv_seqlen), dim=0)]).int().to(device)
-            max_q_seqlen = max(q_seqlen)
-            max_kv_seqlen = max(kv_seqlen)
         out = flash_attn_3.flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_kv, max_q_seqlen, max_kv_seqlen)
     else:
         raise ValueError(f"Unknown attention module: {config.ATTN}")

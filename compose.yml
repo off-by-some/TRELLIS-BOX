@@ -1,6 +1,7 @@
 name: trellis-box
 
 x-nvidia-gpu: &nvidia-gpu
+  gpus: ${GPU_COUNT:-all}
   deploy:
     resources:
       reservations:
@@ -38,7 +39,6 @@ services:
       TRANSFORMERS_CACHE: /home/appuser/.cache/huggingface
       U2NET_HOME: /app/rembg_cache
       TRELLIS_OUTPUT_DIR: /app/outputs
-      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-all}
       HF_TOKEN: ${HF_TOKEN:-}
     volumes:
       - ${HOME}/.cache/huggingface:/home/appuser/.cache/huggingface
@@ -68,6 +68,10 @@ services:
         PYTORCH_CUDA_INDEX: ${PYTORCH_CUDA_INDEX:-cu124}
         FLASH_ATTN_VERSION: ${FLASH_ATTN_VERSION:-2.7.3}
         FLASH_ATTN_WHEEL_URL: ${FLASH_ATTN_WHEEL_URL:-auto}
+        INSTALL_SAGEATTENTION: ${INSTALL_SAGEATTENTION:-auto}
+        SAGEATTENTION_PACKAGE: ${SAGEATTENTION_PACKAGE:-sageattention==1.0.6}
+        SAGEATTENTION_EXT_PARALLEL: ${SAGEATTENTION_EXT_PARALLEL:-4}
+        SAGEATTENTION_NVCC_THREADS: ${SAGEATTENTION_NVCC_THREADS:-8}
         APP_UID: ${HOST_UID:-1000}
         APP_GID: ${HOST_GID:-1000}
         MAX_JOBS: ${MAX_JOBS:-8}
@@ -86,8 +90,8 @@ services:
       TRELLIS2_FLOW_BLOCK_OFFLOAD: ${TRELLIS2_FLOW_BLOCK_OFFLOAD:-1}
       PYTORCH_CUDA_ALLOC_CONF: ${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
       CUDA_MODULE_LOADING: LAZY
-      ATTN_BACKEND: ${ATTN_BACKEND:-flash_attn}
-      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-all}
+      ATTN_BACKEND: ${ATTN_BACKEND:-sage}
+      SPARSE_ATTN_BACKEND: ${SPARSE_ATTN_BACKEND:-flash_attn}
       HF_TOKEN: ${HF_TOKEN:-}
     volumes:
       - ${HOME}/.cache/huggingface:/home/trellis/.cache/huggingface

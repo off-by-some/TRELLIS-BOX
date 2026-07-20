@@ -11,32 +11,59 @@ read_token_file() {
 
     [ -f "${token_file}" ] || return 1
     IFS= read -r token < "${token_file}" || return 1
-    token="${token//[[:space:]]/}"
-    [ -n "${token}" ] || return 1
+    token="$(first_hf_token "${token}")" || return 1
     printf '%s\n' "${token}"
+}
+
+first_hf_token() {
+    grep -Eo 'hf_[A-Za-z0-9]{20,}' <<< "${1:-}" | head -n 1
 }
 
 load_hf_token() {
     local token
 
     if [ -n "${HF_TOKEN:-}" ]; then
-        export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:-${HF_TOKEN}}"
-        echo "[startup] Hugging Face token: found in environment." >&2
-        return
+        token="$(first_hf_token "${HF_TOKEN}" || true)"
+        if [ -n "${token}" ]; then
+            export HF_TOKEN="${token}"
+            export HUGGING_FACE_HUB_TOKEN="${HUGGING_FACE_HUB_TOKEN:-${token}}"
+            echo "[startup] Hugging Face token: found in environment." >&2
+            return
+        fi
     fi
     if [ -n "${HUGGING_FACE_HUB_TOKEN:-}" ]; then
-        export HF_TOKEN="${HUGGING_FACE_HUB_TOKEN}"
-        echo "[startup] Hugging Face token: found in environment." >&2
-        return
+        token="$(first_hf_token "${HUGGING_FACE_HUB_TOKEN}" || true)"
+        if [ -n "${token}" ]; then
+            export HF_TOKEN="${token}"
+            export HUGGING_FACE_HUB_TOKEN="${token}"
+            echo "[startup] Hugging Face token: found in environment." >&2
+            return
+        fi
     fi
 
     for token_file in \
         "${HF_TOKEN_FILE:-}" \
+        "${HF_TOKEN_PATH:-}" \
         "${HF_HOME:-/home/${APP_USER}/.cache/huggingface}/token" \
+        "${XDG_CACHE_HOME:-/home/${APP_USER}/.cache}/huggingface/token" \
         "/home/${APP_USER}/.huggingface/token"
     do
         [ -n "${token_file}" ] || continue
         token="$(read_token_file "${token_file}" || true)"
+        if [ -n "${token}" ]; then
+            export HF_TOKEN="${token}"
+            export HUGGING_FACE_HUB_TOKEN="${token}"
+            echo "[startup] Hugging Face token: found in ${token_file}." >&2
+            return
+        fi
+    done
+
+    for token_file in \
+        "${HF_HOME:-/home/${APP_USER}/.cache/huggingface}/stored_tokens" \
+        "${XDG_CACHE_HOME:-/home/${APP_USER}/.cache}/huggingface/stored_tokens"
+    do
+        [ -f "${token_file}" ] || continue
+        token="$(grep -Eo 'hf_[A-Za-z0-9]{20,}' "${token_file}" | head -n 1 || true)"
         if [ -n "${token}" ]; then
             export HF_TOKEN="${token}"
             export HUGGING_FACE_HUB_TOKEN="${token}"
