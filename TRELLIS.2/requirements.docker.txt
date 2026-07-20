@@ -3,6 +3,7 @@ imageio-ffmpeg
 tqdm
 easydict
 opencv-python-headless
+OpenEXR
 ninja
 trimesh
 transformers

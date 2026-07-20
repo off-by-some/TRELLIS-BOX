@@ -103,7 +103,8 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         pipeline.shape_slat_normalization = args['shape_slat_normalization']
         pipeline.tex_slat_normalization = args['tex_slat_normalization']
 
-        pipeline.image_cond_model = getattr(image_feature_extractor, args['image_cond_model']['name'])(**args['image_cond_model']['args'])
+        image_cond_model_config = image_feature_extractor.resolve_image_cond_model_config(args['image_cond_model'])
+        pipeline.image_cond_model = getattr(image_feature_extractor, image_cond_model_config['name'])(**image_cond_model_config['args'])
         pipeline.rembg_model = getattr(rembg, args['rembg_model']['name'])(**args['rembg_model']['args'])
         
         pipeline.low_vram = args.get('low_vram', True)

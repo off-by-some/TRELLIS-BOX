@@ -55,6 +55,7 @@ prepare_dirs() {
 
 VERSION=""
 POSITIONAL=()
+RESERVED_PORTS=()
 
 parse_version_args() {
     VERSION=""
@@ -248,12 +249,30 @@ port_is_open() {
     ! (:</dev/tcp/127.0.0.1/"${port}") >/dev/null 2>&1
 }
 
+port_is_reserved() {
+    local port="$1"
+    local reserved
+
+    for reserved in "${RESERVED_PORTS[@]}"; do
+        if [ "${reserved}" = "${port}" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+reserve_port() {
+    local port="${1:-}"
+    [ -n "${port}" ] || return
+    RESERVED_PORTS+=("${port}")
+}
+
 next_open_port() {
     local port="$1"
     local limit=$((port + 50))
 
     while [ "${port}" -le "${limit}" ]; do
-        if port_is_open "${port}"; then
+        if port_is_open "${port}" && ! port_is_reserved "${port}"; then
             echo "${port}"
             return 0
         fi
@@ -266,9 +285,16 @@ next_open_port() {
 set_auto_port() {
     local key="$1"
     local preferred="$2"
-    local port
+    local port configured_port
 
-    if [ -n "${!key:-}" ] || env_file_has "${key}"; then
+    if [ -n "${!key:-}" ]; then
+        reserve_port "${!key}"
+        return
+    fi
+
+    if env_file_has "${key}"; then
+        configured_port="$(env_file_value "${key}" || true)"
+        reserve_port "${configured_port}"
         return
     fi
 
@@ -278,6 +304,7 @@ set_auto_port() {
     }
 
     export "${key}=${port}"
+    reserve_port "${port}"
 }
 
 configure_auto_env() {
@@ -287,6 +314,7 @@ configure_auto_env() {
     set_auto_default HOST_UID "$(detect_host_uid)"
     set_auto_default HOST_GID "$(detect_host_gid)"
     set_auto_default TRELLIS2_FLOW_BLOCK_OFFLOAD 1
+    set_auto_default TRELLIS2_IMAGE_ENCODER timm-dinov3
 
     if [ -z "${HF_TOKEN:-}" ]; then
         hf_token="$(detect_hf_token || true)"
@@ -344,6 +372,9 @@ print_auto_env() {
     if [ -n "${SPARSE_ATTN_BACKEND:-}" ]; then
         parts+=("sparse attention=${SPARSE_ATTN_BACKEND}")
     fi
+    if [ -n "${TRELLIS2_IMAGE_ENCODER:-}" ]; then
+        parts+=("image encoder=${TRELLIS2_IMAGE_ENCODER}")
+    fi
     parts+=("ports 1:${TRELLIS_V1_PORT:-8501} 2:${TRELLIS_V2_PORT:-7860} texture:${TRELLIS_V2_TEXTURE_PORT:-7861}")
 
     printf 'Auto config: '
@@ -377,11 +408,37 @@ service_for_version() {
     esac
 }
 
+image_for_service() {
+    case "${1:-}" in
+        v1)
+            echo "trellis-box:v1"
+            ;;
+        v2|v2-texture)
+            echo "trellis-box:v2"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+ensure_image_exists() {
+    local service="$1"
+    local image
+
+    image="$(image_for_service "${service}")" || return 0
+    if ! docker image inspect "${image}" >/dev/null 2>&1; then
+        echo "Image ${image} is missing; building ${service} once."
+        compose build "${service}"
+    fi
+}
+
 run_services() {
     prepare_dirs
     configure_auto_env
     print_auto_env
-    compose up --build "$@"
+    ensure_image_exists "$1"
+    compose up "$@"
 }
 
 cmd="${1:-help}"
@@ -420,7 +477,8 @@ case "${cmd}" in
         prepare_dirs
         configure_auto_env
         print_auto_env
-        compose --profile extras up --build v2-texture
+        ensure_image_exists v2-texture
+        compose --profile extras up v2-texture
         ;;
     dev)
         parse_version_args "$@"
@@ -436,7 +494,8 @@ case "${cmd}" in
         prepare_dirs
         configure_auto_env
         print_auto_env
-        compose -f compose.yml -f compose.dev.yml up --build "${service}"
+        ensure_image_exists "${service}"
+        compose -f compose.yml -f compose.dev.yml up "${service}"
         ;;
     build)
         parse_version_args "$@"

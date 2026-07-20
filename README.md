@@ -10,7 +10,9 @@
 <a href="https://github.com/off-by-some/TRELLIS-BOX/blob/main/LICENSE"><img src='https://img.shields.io/badge/License-MIT-yellow' alt='MIT License'></a>
 </p>
 
-This repository packages Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) image-to-3D pipeline into containers you can actually run on consumer hardware without spending an afternoon fighting dependencies. It ships two apps side by side and a single launcher that runs either one:
+This repository packages Microsoft's [TRELLIS](https://github.com/microsoft/TRELLIS) image-to-3D pipeline into containers you can actually run on consumer hardware without spending an afternoon fighting dependencies. The goal is simple: **run it locally, ungated, on a single consumer GPU** — with the defaults chosen so nothing forces you through a license wall or a datacenter card just to get a 3D model out.
+
+It ships two apps side by side and a single launcher that runs either one:
 
 - **`TRELLIS/`** — the original Streamlit app, tuned for lower VRAM with FP16 mixed precision (~50% memory savings) and automatic GLB export. Runs at http://localhost:8501.
 - **`TRELLIS.2/`** — the newer O-Voxel/PBR pipeline with a Gradio interface and a dedicated texturing app. Runs at http://localhost:7860.
@@ -20,16 +22,20 @@ Pick version 1 when you want the leaner, lower-VRAM workflow. Pick version 2 whe
 
 ## Quickstart
 
-Clone the repo and run whichever version you want from the root:
-
 ```bash
 $ git clone https://github.com/off-by-some/TRELLIS-BOX && cd TRELLIS-BOX
 
-$ ./trellis --version 1      # original Streamlit app  → http://localhost:8501
-$ ./trellis --version 2      # newer TRELLIS.2 app     → http://localhost:7860
+$ ./trellis build --version 1 # build once, when needed
+$ ./trellis --version 1       # original Streamlit app  → http://localhost:8501
+
+$ ./trellis build --version 2 # build once, when needed
+$ ./trellis --version 2       # newer TRELLIS.2 app     → http://localhost:7860
 ```
 
-The first build takes a while — CUDA extensions are compiled from source, and there's no way around that on the initial run. After that it's cached. Model weights download to `~/.cache/huggingface` and are shared between runs, so you only pay that cost once too.
+That's the whole happy path on the default, ungated configuration. Two things to know before the first run:
+
+- **TRELLIS.2 needs a quick one-time setup** — accept a free model license (RMBG-2.0) and authenticate with a Hugging Face token. Takes a minute; see [Model Access](#model-access-read-before-first-run) just below. (Version 1 needs neither.)
+- **The first build is slow** because CUDA extensions compile from source. After that, `./trellis --version ...` starts the app without rebuilding; use `./trellis build -v 2` only when Dockerfiles or dependencies change. Model weights download to `~/.cache/huggingface` at runtime and are shared across runs, so you pay that cost once.
 
 `./trellis` auto-detects the setup that usually just works: your GPU architecture, a sane number of compile jobs, and fallback ports if the defaults are taken. If you'd rather drive Docker yourself, the raw Compose equivalents are there:
 
@@ -37,6 +43,84 @@ The first build takes a while — CUDA extensions are compiled from source, and 
 $ docker compose up --build v1
 $ docker compose up --build v2
 ```
+
+
+## Requirements
+
+- **Docker** with the NVIDIA Container Toolkit
+- **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended, especially for v2)
+- **Platform**: Linux, macOS, or Windows with Docker Desktop
+- **Storage**: ~20GB free for models and Docker layers
+
+### Install the NVIDIA Container Toolkit (Linux)
+
+Arch / Manjaro:
+```bash
+$ sudo pacman -Syu nvidia-container-toolkit
+```
+
+Ubuntu / Debian:
+```bash
+# Add NVIDIA's signed repository
+$ distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
+$ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+   sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+$ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+   sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+$ sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+```
+
+### Verify GPU access
+
+```bash
+$ ./trellis check
+```
+
+Or test Docker's GPU passthrough directly:
+```bash
+$ docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
+```
+
+
+## Model Access (read before first run)
+
+By design, the default configuration avoids gated weights wherever possible — but TRELLIS.2 still has one. Running v2 takes two quick steps: accept a free license, and authenticate so the download can go through. Both are one-time.
+
+> Version 1 has no gated dependencies. If you only run `--version 1`, you can skip this whole section.
+
+### Step 1 — accept the RMBG-2.0 license
+
+TRELLIS.2 uses `briaai/RMBG-2.0` for background removal. It's free, but Hugging Face gates the download, so accept access once before your first v2 run:
+
+- Open https://huggingface.co/briaai/RMBG-2.0 and accept / request access with your Hugging Face account.
+
+BRIA publishes RMBG-2.0 under its own license terms — including non-commercial self-hosted weights unless you have a commercial agreement — so it's worth a quick read of the model card.
+
+### Step 2 — authenticate with a Hugging Face token
+
+Accepting the license only matters if the container can prove it's you, so a token is required for v2 (it's what carries that acceptance through at download time). The default DINOv3 image encoder itself is public and needs no token — this is purely to get RMBG-2.0 through the gate. The same token also pulls any other private/gated models and raises your Hub rate limits.
+
+The simplest path:
+
+```bash
+$ huggingface-cli login
+```
+
+After that, `./trellis` automatically reads `~/.cache/huggingface/token` and passes it into Docker. Prefer an explicit env var instead? Copy the example file and set it:
+
+```bash
+$ cp .env.example .env
+$ $EDITOR .env
+```
+
+```bash
+HF_TOKEN=hf_your_token_here
+```
+
+Either way, `./trellis config` prints `HF token detected` once it finds one.
 
 
 ## CLI Reference
@@ -92,46 +176,6 @@ The v2 pipeline produces physically-based materials, and its dedicated texturing
 Both apps export GLB automatically, which makes them easy to wire into content pipelines or research loops. The FP16 path on v1 keeps things reachable on modest hardware, so you can iterate without an A100 on your desk.
 
 
-## Requirements
-
-- **Docker** with the NVIDIA Container Toolkit
-- **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended, especially for v2)
-- **Platform**: Linux, macOS, or Windows with Docker Desktop
-- **Storage**: ~20GB free for models and Docker layers
-
-### Install the NVIDIA Container Toolkit (Linux)
-
-Arch / Manjaro:
-```bash
-$ sudo pacman -Syu nvidia-container-toolkit
-```
-
-Ubuntu / Debian:
-```bash
-# Add NVIDIA's signed repository
-$ distribution=$(. /etc/os-release; echo $ID$VERSION_ID)
-$ curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
-   sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-$ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-   sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-   sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-$ sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-```
-
-### Verify GPU access
-
-```bash
-$ ./trellis check
-```
-
-Or test Docker's GPU passthrough directly:
-```bash
-$ docker run --rm --gpus all nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04 nvidia-smi
-```
-
-
 ## Configuration
 
 The defaults are meant to work without any setup. You only need a `.env` file when you want to pin overrides — copy the example and edit what you need:
@@ -140,22 +184,20 @@ The defaults are meant to work without any setup. You only need a `.env` file wh
 $ cp .env.example .env
 ```
 
-The overrides worth knowing about:
+The overrides worth knowing about day to day:
 
 ```bash
 TRELLIS_V1_PORT=8501            # original app port
 TRELLIS_V2_PORT=7860            # TRELLIS.2 app port
 TORCH_CUDA_ARCH_LIST=8.9        # GPU compute capability (usually auto-detected)
 MAX_JOBS=8                      # parallel compile jobs during build
-ATTN_BACKEND=sage               # dense TRELLIS.2 attention backend
-SPARSE_ATTN_BACKEND=flash_attn  # packed varlen sparse attention backend
-INSTALL_SAGEATTENTION=auto      # install SageAttention when the build arch supports it
-SAGEATTENTION_PACKAGE=sageattention==1.0.6
 HOST_UID=1000                   # host user id for writable bind mounts
 HOST_GID=1000                   # host group id for writable bind mounts
-HF_TOKEN=                       # Hugging Face token for gated model downloads
+HF_TOKEN=                       # Hugging Face token for private/gated downloads
 TRELLIS2_FLOW_BLOCK_OFFLOAD=1   # offload v2 flow blocks to save VRAM
 ```
+
+For encoder, attention-backend, and gated-checkpoint overrides, see [Advanced Configuration](#advanced-configuration) near the end — you shouldn't need any of it to get running.
 
 The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own. Set it by hand only if detection fails or you're building for a different card than the one you're on:
 
@@ -165,42 +207,6 @@ The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own.
 | RTX 4090 | `8.9` |
 | A100 | `8.0` |
 | H100 | `9.0` |
-
-### Hugging Face Token
-
-TRELLIS.2 loads Facebook DINOv3 as its image encoder, and that checkpoint is gated. Open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access with your Hugging Face account, then save a local token:
-
-```bash
-$ huggingface-cli login
-```
-
-After that, `./trellis` automatically reads `~/.cache/huggingface/token` and passes it into Docker. You can also set `HF_TOKEN` directly:
-
-```bash
-$ cp .env.example .env
-$ $EDITOR .env
-```
-
-Set:
-
-```bash
-HF_TOKEN=hf_your_token_here
-```
-
-`./trellis config` will say `HF token detected` when it finds one.
-
-### Attention Backends
-
-TRELLIS.2 uses SageAttention for dense attention on supported GPUs and FlashAttention for packed variable-length sparse attention by default:
-
-```bash
-ATTN_BACKEND=sage
-SPARSE_ATTN_BACKEND=flash_attn
-```
-
-The launcher auto-selects `sage` for dense attention on Ampere, Ada, and Hopper GPUs with the current CUDA 12.4 image. `SPARSE_ATTN_BACKEND=sage` is also implemented through `sageattn_varlen`, but the default stays on FlashAttention while that path gets broader real-world testing.
-
-The Docker build defaults to `sageattention==1.0.6` because that is the version currently published on PyPI. You can override `SAGEATTENTION_PACKAGE` with a Git/source package spec later if you want to experiment with a newer upstream release.
 
 
 ## Outputs and Caches
@@ -227,6 +233,8 @@ The launcher creates these directories for you and builds containers with your h
 $ ./trellis check
 ```
 If that fails, Docker can't see your GPU — recheck the NVIDIA Container Toolkit install above before touching anything else.
+
+**v2 background removal fails with a 403.** You haven't accepted the RMBG-2.0 license, or the token in use hasn't. Revisit [Model Access](#model-access-read-before-first-run), accept access at https://huggingface.co/briaai/RMBG-2.0, and confirm `./trellis config` reports `HF token detected`.
 
 **v2 build fails while compiling CUDA extensions.** This is almost always too many parallel jobs eating memory. Lower it:
 ```bash
@@ -281,11 +289,52 @@ Both apps share the same core stages, with v2 adding PBR material output:
 The memory savings on v1 come from converting transformer models to FP16 while keeping normalization layers in FP32, plus aggressive CUDA cache clearing between stages. On v2, the same pressure is handled by offloading flow blocks (`TRELLIS2_FLOW_BLOCK_OFFLOAD`) so large models fit on smaller cards.
 
 
+## Advanced Configuration
+
+Everything here is optional. The defaults are chosen to run locally and ungated on consumer hardware; reach for these only if you're deliberately trading that away — matching Microsoft's original checkpoints exactly, or squeezing out more speed.
+
+### Image encoder (DINOv3)
+
+By default TRELLIS.2 uses the public timm conversion of DINOv3 ViT-L/16, which avoids Meta's gated checkpoint while staying in the same ViT-L/16 DINOv3/LVD-1689M family the released pipeline expects:
+
+```bash
+TRELLIS2_IMAGE_ENCODER=timm-dinov3
+TRELLIS2_DINOV3_MODEL=hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m
+```
+
+It downloads at runtime into `~/.cache/huggingface` — not into image layers — so normal image pushes don't carry the weights. The timm checkpoint identifies itself as DINOv3 and uses the DINOv3 license; review it before use:
+
+- https://huggingface.co/timm/vit_large_patch16_dinov3_qkvb.lvd1689m
+- https://huggingface.co/timm/vit_large_patch16_dinov3_qkvb.lvd1689m/blob/main/LICENSE.md
+
+You can also point `TRELLIS2_IMAGE_ENCODER` at any timm/HF Hub model id directly.
+
+**Using Meta's original gated checkpoint.** If you specifically want the checkpoint Microsoft shipped with TRELLIS.2:
+
+```bash
+TRELLIS2_IMAGE_ENCODER=meta-dinov3
+```
+
+Then open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license / request access, and confirm `./trellis config` reports `HF token detected`. This reintroduces a gate the default path is built to avoid — only worth it if you need exact parity with the upstream release.
+
+### Attention backends
+
+TRELLIS.2 uses SageAttention for dense attention on supported GPUs and FlashAttention for packed variable-length sparse attention by default:
+
+```bash
+ATTN_BACKEND=sage               # dense attention backend
+SPARSE_ATTN_BACKEND=flash_attn  # packed varlen sparse attention backend
+SAGEATTENTION_PACKAGE=sageattention==1.0.6
+```
+
+The launcher auto-selects `sage` for dense attention on Ampere, Ada, and Hopper GPUs with the current CUDA 12.4 image, and the Docker build installs SageAttention whenever either backend is set to `sage`. `SPARSE_ATTN_BACKEND=sage` is also implemented (via `sageattn_varlen`), but the default stays on FlashAttention while that path gets broader real-world testing. `SAGEATTENTION_PACKAGE` defaults to the current PyPI release (`sageattention==1.0.6`); override it with a Git/source spec to experiment with a newer upstream build.
+
+
 ## Background
 
 This started because running TRELLIS locally was genuinely painful. The research is excellent, but the setup involved a long chain of platform-specific dependencies that broke in creative ways. Containerizing it fixes the reproducibility problem — the environment is the same everywhere — and the FP16 work on v1 brought the VRAM requirements down far enough that you don't need datacenter hardware to try it.
 
-Adding TRELLIS.2 alongside the original kept that spirit: one launcher, two pipelines, no manual environment surgery. You choose the tradeoff (leaner v1 vs. newer PBR v2) and the tooling handles the rest.
+Adding TRELLIS.2 alongside the original kept that spirit: one launcher, two pipelines, no manual environment surgery, and defaults that stay ungated wherever the licenses allow. You choose the tradeoff (leaner v1 vs. newer PBR v2) and the tooling handles the rest.
 
 
 ## Acknowledgements
@@ -297,4 +346,6 @@ This project builds on Microsoft's [TRELLIS](https://github.com/microsoft/TRELLI
 
 ## License
 
-MIT License. Based on Microsoft's TRELLIS research.
+MIT License, for this containerization and tooling. Based on Microsoft's TRELLIS research.
+
+Note that the models it runs carry their own terms. In the default configuration, TRELLIS.2's DINOv3 image encoder uses the public timm ViT-L/16 conversion (`hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m`) under the DINOv3 license, and background removal uses `briaai/RMBG-2.0` under BRIA's license (non-commercial self-hosted unless you hold a commercial agreement). Both download at runtime into the mounted Hugging Face cache rather than during Docker build. Review each model's license before use, especially for commercial work.

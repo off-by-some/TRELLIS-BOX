@@ -63,7 +63,6 @@ From this directory, build the low-VRAM image:
 DOCKER_BUILDKIT=1 docker build \
   --build-arg APP_UID="$(id -u)" \
   --build-arg APP_GID="$(id -g)" \
-  --build-arg INSTALL_SAGEATTENTION=auto \
   --build-arg SAGEATTENTION_PACKAGE=sageattention==1.0.6 \
   -t trellis2-lowvram .
 ```
@@ -86,9 +85,9 @@ docker run --rm --gpus all \
 The Triton cache mount avoids recompiling runtime kernels every time the container starts.
 The container fixes ownership on mounted cache/output directories before it drops to the non-root app user.
 Dense attention uses SageAttention on supported GPUs; packed varlen sparse attention uses FlashAttention by default.
-The Dockerfile uses `sageattention==1.0.6` because that is the version currently published on PyPI; override `SAGEATTENTION_PACKAGE` if you want to test a source/GitHub build.
+The Dockerfile installs SageAttention when either configured attention backend is `sage`. It uses `sageattention==1.0.6` because that is the version currently published on PyPI; override `SAGEATTENTION_PACKAGE` if you want to test a source/GitHub build.
 
-TRELLIS.2 uses the gated `facebook/dinov3-vitl16-pretrain-lvd1689m` checkpoint. Open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell.
+TRELLIS.2 uses the public timm DINOv3 ViT-L/16 conversion by default: `hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m`. The checkpoint downloads at runtime into the mounted Hugging Face cache, not during Docker build, and retains the DINOv3 license. To use the original gated Transformers checkpoint instead, set `TRELLIS2_IMAGE_ENCODER=meta-dinov3`, open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell. If background removal fails with a 403, also accept/request access for https://huggingface.co/briaai/RMBG-2.0 and review BRIA's RMBG-2.0 license terms.
 
 ### Prerequisites
 - **System**: The code is currently tested only on **Linux**.

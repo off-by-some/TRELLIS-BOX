@@ -9,7 +9,8 @@ ARG TORCHVISION_VERSION=0.21.0
 ARG PYTORCH_CUDA_INDEX=cu124
 ARG FLASH_ATTN_VERSION=2.7.3
 ARG FLASH_ATTN_WHEEL_URL=auto
-ARG INSTALL_SAGEATTENTION=auto
+ARG ATTN_BACKEND=sage
+ARG SPARSE_ATTN_BACKEND=flash_attn
 ARG SAGEATTENTION_PACKAGE=sageattention==1.0.6
 ARG SAGEATTENTION_EXT_PARALLEL=4
 ARG SAGEATTENTION_NVCC_THREADS=8
@@ -32,7 +33,8 @@ ARG TORCHVISION_VERSION
 ARG PYTORCH_CUDA_INDEX
 ARG FLASH_ATTN_VERSION
 ARG FLASH_ATTN_WHEEL_URL
-ARG INSTALL_SAGEATTENTION
+ARG ATTN_BACKEND
+ARG SPARSE_ATTN_BACKEND
 ARG SAGEATTENTION_PACKAGE
 ARG SAGEATTENTION_EXT_PARALLEL
 ARG SAGEATTENTION_NVCC_THREADS
@@ -119,37 +121,16 @@ fi
 python -m pip install "${FLASH_ATTN_WHEEL_URL}"
 EOF
 
-# Dense attention fast path. The PyPI package currently publishes the 1.0.x
-# line; keep the package spec overrideable so source/GitHub builds can opt into
-# newer SageAttention releases without changing this Dockerfile.
+# SageAttention is installed when either configured attention backend asks for
+# it. Model weights are intentionally not downloaded during image build.
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
 set -eux
-install_sage=0
-case "${INSTALL_SAGEATTENTION}" in
-    1|true|TRUE|yes|YES)
-        install_sage=1
-        ;;
-    0|false|FALSE|no|NO)
-        install_sage=0
-        ;;
-    auto)
-        case " ${TORCH_CUDA_ARCH_LIST} " in
-            *" 8.0 "*|*" 8.6 "*|*" 8.9 "*|*" 9.0 "*)
-                install_sage=1
-                ;;
-        esac
-        ;;
-    *)
-        echo "Unknown INSTALL_SAGEATTENTION=${INSTALL_SAGEATTENTION}" >&2
-        exit 1
-        ;;
-esac
-if [ "${install_sage}" = "1" ]; then
+if [ "${ATTN_BACKEND}" = "sage" ] || [ "${SPARSE_ATTN_BACKEND}" = "sage" ]; then
     EXT_PARALLEL="${SAGEATTENTION_EXT_PARALLEL}" \
     NVCC_APPEND_FLAGS="--threads ${SAGEATTENTION_NVCC_THREADS}" \
     python -m pip install "${SAGEATTENTION_PACKAGE}" --no-build-isolation
 else
-    echo "Skipping SageAttention for TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
+    echo "Skipping SageAttention for ATTN_BACKEND=${ATTN_BACKEND} SPARSE_ATTN_BACKEND=${SPARSE_ATTN_BACKEND}"
 fi
 EOF
 
@@ -217,6 +198,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ATTN_BACKEND=sage \
     SPARSE_ATTN_BACKEND=flash_attn \
     TRELLIS2_FLOW_BLOCK_OFFLOAD=1 \
+    TRELLIS2_IMAGE_ENCODER=timm-dinov3 \
+    TRELLIS2_DINOV3_MODEL=hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m \
+    TRELLIS2_DINOV3_IMAGE_SIZE=512 \
+    TRELLIS2_TIMM_DINOV3_TRUNCATE_ROPE=1 \
+    TRELLIS2_REMBG_REVISION=5df4c9c76d8170882c34f6986e848ee07fd0ba43 \
     TOKENIZERS_PARALLELISM=false \
     TRANSFORMERS_NO_ADVISORY_WARNINGS=1 \
     XDG_CACHE_HOME=/home/${APP_USER}/.cache \

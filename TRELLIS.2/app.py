@@ -48,6 +48,38 @@ def startup(message: str) -> None:
     print(f"[startup] {message}", flush=True)
 
 
+def load_hdri_rgb(path: str) -> np.ndarray:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"HDRI map is missing: {path}")
+
+    if path.lower().endswith(".exr"):
+        try:
+            import OpenEXR
+        except ImportError as e:
+            raise RuntimeError(
+                "OpenEXR is required to load bundled HDRI .exr maps. "
+                "Rebuild the TRELLIS.2 image so requirements.docker.txt is installed."
+            ) from e
+        with OpenEXR.File(path) as exr_file:
+            channels = exr_file.channels()
+            if "RGB" not in channels:
+                raise RuntimeError(f"HDRI map does not contain an RGB channel: {path}")
+            image = channels["RGB"].pixels
+        if image.ndim != 3 or image.shape[-1] < 3:
+            raise RuntimeError(f"Unexpected HDRI map shape for {path}: {tuple(image.shape)}")
+        return np.asarray(image[:, :, :3], dtype=np.float32)
+
+    image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if image is None:
+        raise RuntimeError(f"OpenCV could not load HDRI map: {path}")
+    if image.ndim == 2:
+        return np.repeat(image[:, :, None], 3, axis=2)
+    if image.shape[-1] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+        return image[:, :, :3]
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+
 css = """
 /* Overwrite Gradio Default Style */
 .stepper-wrapper {
@@ -666,7 +698,7 @@ if __name__ == "__main__":
         unit="map",
     ):
         envmap[name] = EnvMap(torch.tensor(
-            cv2.cvtColor(cv2.imread(path, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
+            load_hdri_rgb(path),
             dtype=torch.float32, device='cuda'
         ))
     
