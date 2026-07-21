@@ -199,7 +199,7 @@ TRELLIS2_FLOW_BLOCK_OFFLOAD=1   # offload v2 flow blocks to save VRAM
 
 For encoder, attention-backend, and gated-checkpoint overrides, see [Advanced Configuration](#advanced-configuration) near the end — you shouldn't need any of it to get running.
 
-The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own. Set it by hand only if detection fails or you're building for a different card than the one you're on:
+The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own, then falls back to the GPU model listed under `/proc/driver/nvidia/gpus/` on Linux hosts. Set it by hand only if detection fails or you're building for a different card than the one you're on:
 
 | GPU | Value |
 | --- | --- |
@@ -207,6 +207,8 @@ The launcher normally reads `TORCH_CUDA_ARCH_LIST` from `nvidia-smi` on its own.
 | RTX 4090 | `8.9` |
 | A100 | `8.0` |
 | H100 | `9.0` |
+
+This auto-detection only runs through `./trellis`. A bare `docker build` cannot reliably see the host GPU, so pass `--build-arg TORCH_CUDA_ARCH_LIST=...` there if you want a narrow CUDA build.
 
 
 ## Outputs and Caches
@@ -319,15 +321,21 @@ Then open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accep
 
 ### Attention backends
 
-TRELLIS.2 uses SageAttention for dense attention on supported GPUs and FlashAttention for packed variable-length sparse attention by default:
+TRELLIS.2 uses FlashAttention for both dense attention and packed variable-length sparse attention by default. This keeps the local path closest to the upstream release while quality is being validated:
 
 ```bash
-ATTN_BACKEND=sage               # dense attention backend
+ATTN_BACKEND=flash_attn         # dense attention backend
 SPARSE_ATTN_BACKEND=flash_attn  # packed varlen sparse attention backend
+```
+
+SageAttention remains available as an opt-in speed experiment:
+
+```bash
+ATTN_BACKEND=sage
 SAGEATTENTION_PACKAGE=sageattention==1.0.6
 ```
 
-The launcher auto-selects `sage` for dense attention on Ampere, Ada, and Hopper GPUs with the current CUDA 12.4 image, and the Docker build installs SageAttention whenever either backend is set to `sage`. `SPARSE_ATTN_BACKEND=sage` is also implemented (via `sageattn_varlen`), but the default stays on FlashAttention while that path gets broader real-world testing. `SAGEATTENTION_PACKAGE` defaults to the current PyPI release (`sageattention==1.0.6`); override it with a Git/source spec to experiment with a newer upstream build.
+The Docker build installs SageAttention whenever either backend is set to `sage`. `SPARSE_ATTN_BACKEND=sage` is also implemented via `sageattn_varlen`, but the default stays on FlashAttention while that path gets broader real-world testing.
 
 
 ## Background

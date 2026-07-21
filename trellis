@@ -235,13 +235,83 @@ sage_supported_arch() {
 }
 
 detect_gpu_arch() {
+    local arch
+
     if ! command -v nvidia-smi >/dev/null 2>&1; then
-        return 1
+        detect_gpu_arch_from_proc
+        return
     fi
 
-    nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null \
+    arch="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null \
         | head -n 1 \
-        | tr -d '[:space:]'
+        | tr -d '[:space:]')"
+
+    if [[ "${arch}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        printf '%s\n' "${arch}"
+        return 0
+    fi
+
+    detect_gpu_arch_from_name "$(detect_gpu_name || true)"
+}
+
+detect_gpu_name() {
+    local info_file name
+
+    if command -v nvidia-smi >/dev/null 2>&1; then
+        name="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null \
+            | head -n 1 \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        if [ -n "${name}" ]; then
+            printf '%s\n' "${name}"
+            return 0
+        fi
+    fi
+
+    for info_file in /proc/driver/nvidia/gpus/*/information; do
+        [ -f "${info_file}" ] || continue
+        sed -n 's/^Model:[[:space:]]*//p' "${info_file}" | head -n 1
+        return 0
+    done
+
+    return 1
+}
+
+detect_gpu_arch_from_proc() {
+    detect_gpu_arch_from_name "$(detect_gpu_name || true)"
+}
+
+detect_gpu_arch_from_name() {
+    local name
+    name="$(tr '[:lower:]' '[:upper:]' <<< "${1:-}")"
+
+    [ -n "${name}" ] || return 1
+
+    case "${name}" in
+        *H100*|*H200*|*GH200*)
+            echo "9.0"
+            ;;
+        *RTX\ 4090*|*RTX\ 4080*|*RTX\ 4070*|*RTX\ 4060*|*RTX\ 4050*|\
+        *RTX\ 6000\ ADA*|*RTX\ 5000\ ADA*|*RTX\ 4500\ ADA*|*RTX\ 4000\ ADA*|\
+        *L40*|*L40S*)
+            echo "8.9"
+            ;;
+        *A100*|*A800*)
+            echo "8.0"
+            ;;
+        *RTX\ 3090*|*RTX\ 3080*|*RTX\ 3070*|*RTX\ 3060*|\
+        *RTX\ A6000*|*RTX\ A5000*|*RTX\ A4000*|*A40*|*A10*|*A16*)
+            echo "8.6"
+            ;;
+        *RTX\ 2080*|*RTX\ 2070*|*RTX\ 2060*|*TITAN\ RTX*|*QUADRO\ RTX*|*T4*)
+            echo "7.5"
+            ;;
+        *V100*)
+            echo "7.0"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 port_is_open() {
@@ -335,13 +405,7 @@ configure_auto_env() {
 
     gpu_arch="${TORCH_CUDA_ARCH_LIST:-}"
     gpu_arch="${gpu_arch%% *}"
-    if [ -z "${ATTN_BACKEND:-}" ] && ! env_file_has ATTN_BACKEND; then
-        if sage_supported_arch "${gpu_arch}"; then
-            export ATTN_BACKEND=sage
-        else
-            export ATTN_BACKEND=flash_attn
-        fi
-    fi
+    set_auto_default ATTN_BACKEND flash_attn
     set_auto_default SPARSE_ATTN_BACKEND flash_attn
 
     set_auto_port TRELLIS_V1_PORT 8501
@@ -354,6 +418,8 @@ print_auto_env() {
 
     if [ -n "${TORCH_CUDA_ARCH_LIST:-}" ]; then
         parts+=("GPU arch ${TORCH_CUDA_ARCH_LIST}")
+    else
+        parts+=("GPU arch auto-detect unavailable")
     fi
     if [ -n "${MAX_JOBS:-}" ]; then
         parts+=("MAX_JOBS=${MAX_JOBS}")

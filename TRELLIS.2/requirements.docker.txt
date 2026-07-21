@@ -14,5 +14,5 @@ plyfile
 lpips
 zstandard
 kornia
-timm
+timm==1.0.28
 git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8

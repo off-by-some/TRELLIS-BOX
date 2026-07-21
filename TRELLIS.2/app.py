@@ -3,6 +3,7 @@ import gradio as gr
 import os
 os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import warnings
 from datetime import datetime
 import shutil
 import cv2
@@ -20,6 +21,19 @@ from trellis2.utils import render_utils
 from trellis2.utils.device import cleanup_memory
 import o_voxel
 
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"`torch\.cuda\.amp\.autocast\(args\.\.\.\)` is deprecated.*",
+    category=FutureWarning,
+    module=r"utils3d\.torch\.nerf",
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"Default grid_sample and affine_grid behavior has changed.*",
+    category=UserWarning,
+    module=r"torch\.nn\.functional",
+)
 
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
@@ -413,7 +427,7 @@ def image_to_3d(
     tex_slat_rescale_t: float,
     req: gr.Request,
     progress=gr.Progress(track_tqdm=True),
-) -> str:
+) -> Tuple[dict, str, gr.Button]:
     # --- Sampling ---
     outputs, latents = pipeline.run(
         image,
@@ -452,15 +466,25 @@ def image_to_3d(
     mesh.simplify(16777216) # nvdiffrast limit
     cleanup_memory(pipeline.device, synchronize=True)
     progress(0.92, desc="Rendering preview")
-    images = render_utils.render_snapshot(
-        mesh,
-        resolution=1024,
-        r=2,
-        fov=36,
-        nviews=STEPS,
-        envmap=envmap,
-        cleanup_between_frames=True,
-    )
+    with torch.inference_mode():
+        images = render_utils.render_snapshot(
+            mesh,
+            resolution=1024,
+            r=2,
+            fov=36,
+            nviews=STEPS,
+            envmap=envmap,
+            cleanup_between_frames=True,
+        )
+    frame_counts = {
+        mode['render_key']: len(images.get(mode['render_key'], []))
+        for mode in MODES
+    }
+    if any(count < STEPS for count in frame_counts.values()):
+        raise RuntimeError(
+            "Preview render returned too few frames: "
+            + ", ".join(f"{key}={count}" for key, count in frame_counts.items())
+        )
     del mesh
     cleanup_memory(pipeline.device)
     
@@ -530,7 +554,7 @@ def image_to_3d(
     del images
     cleanup_memory(pipeline.device)
     
-    return state, full_html
+    return state, full_html, gr.update(interactive=True)
 
 
 def extract_glb(
@@ -551,6 +575,9 @@ def extract_glb(
     Returns:
         str: The path to the extracted GLB file.
     """
+    if not state:
+        raise gr.Error("Generate a 3D asset before extracting a GLB.")
+
     user_dir = os.path.join(TMP_DIR, str(req.session_hash))
     shape_slat, tex_slat, res = unpack_state(state)
     mesh = pipeline.decode_latent(shape_slat, tex_slat, res)[0]
@@ -590,7 +617,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
         with gr.Column(scale=1, min_width=360):
             image_prompt = gr.Image(label="Image Prompt", format="png", image_mode="RGBA", type="pil", height=400)
             
-            resolution = gr.Radio(["512", "1024", "1536"], label="Resolution", value="1024")
+            resolution = gr.Radio(["512", "1024", "1536"], label="Resolution (1024/1536 use cascade)", value="1024")
             seed = gr.Slider(0, MAX_SEED, label="Seed", value=0, step=1)
             randomize_seed = gr.Checkbox(label="Randomize Seed", value=True)
             decimation_target = gr.Slider(100000, 1000000, label="Decimation Target", value=500000, step=10000)
@@ -622,7 +649,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
             with gr.Walkthrough(selected=0) as walkthrough:
                 with gr.Step("Preview", id=0):
                     preview_output = gr.HTML(empty_html, label="3D Asset Preview", show_label=True, container=True)
-                    extract_btn = gr.Button("Extract GLB")
+                    extract_btn = gr.Button("Extract GLB", interactive=False)
                 with gr.Step("Extract", id=1):
                     glb_output = gr.Model3D(label="Extracted GLB", height=724, show_label=True, display_mode="solid", clear_color=(0.25, 0.25, 0.25, 1.0))
                     download_btn = gr.DownloadButton(label="Download GLB")
@@ -658,7 +685,8 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
         inputs=[randomize_seed, seed],
         outputs=[seed],
     ).then(
-        lambda: gr.Walkthrough(selected=0), outputs=walkthrough
+        lambda: (gr.Walkthrough(selected=0), gr.update(interactive=False), None),
+        outputs=[walkthrough, extract_btn, output_buf],
     ).then(
         image_to_3d,
         inputs=[
@@ -667,7 +695,7 @@ with gr.Blocks(delete_cache=(600, 600)) as demo:
             shape_slat_guidance_strength, shape_slat_guidance_rescale, shape_slat_sampling_steps, shape_slat_rescale_t,
             tex_slat_guidance_strength, tex_slat_guidance_rescale, tex_slat_sampling_steps, tex_slat_rescale_t,
         ],
-        outputs=[output_buf, preview_output],
+        outputs=[output_buf, preview_output, extract_btn],
     )
     
     extract_btn.click(

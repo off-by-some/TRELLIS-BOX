@@ -9,7 +9,7 @@ ARG TORCHVISION_VERSION=0.21.0
 ARG PYTORCH_CUDA_INDEX=cu124
 ARG FLASH_ATTN_VERSION=2.7.3
 ARG FLASH_ATTN_WHEEL_URL=auto
-ARG ATTN_BACKEND=sage
+ARG ATTN_BACKEND=flash_attn
 ARG SPARSE_ATTN_BACKEND=flash_attn
 ARG SAGEATTENTION_PACKAGE=sageattention==1.0.6
 ARG SAGEATTENTION_EXT_PARALLEL=4
@@ -33,11 +33,6 @@ ARG TORCHVISION_VERSION
 ARG PYTORCH_CUDA_INDEX
 ARG FLASH_ATTN_VERSION
 ARG FLASH_ATTN_WHEEL_URL
-ARG ATTN_BACKEND
-ARG SPARSE_ATTN_BACKEND
-ARG SAGEATTENTION_PACKAGE
-ARG SAGEATTENTION_EXT_PARALLEL
-ARG SAGEATTENTION_NVCC_THREADS
 ARG MAX_JOBS
 ARG TORCH_CUDA_ARCH_LIST
 
@@ -127,19 +122,6 @@ fi
 python -m pip install "${FLASH_ATTN_WHEEL_URL}"
 EOF
 
-# SageAttention is installed when either configured attention backend asks for
-# it. Model weights are intentionally not downloaded during image build.
-RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
-set -eux
-if [ "${ATTN_BACKEND}" = "sage" ] || [ "${SPARSE_ATTN_BACKEND}" = "sage" ]; then
-    EXT_PARALLEL="${SAGEATTENTION_EXT_PARALLEL}" \
-    NVCC_APPEND_FLAGS="--threads ${SAGEATTENTION_NVCC_THREADS}" \
-    python -m pip install "${SAGEATTENTION_PACKAGE}" --no-build-isolation
-else
-    echo "Skipping SageAttention for ATTN_BACKEND=${ATTN_BACKEND} SPARSE_ATTN_BACKEND=${SPARSE_ATTN_BACKEND}"
-fi
-EOF
-
 FROM python-deps AS builder
 
 # Mirrors setup.sh extension flags:
@@ -168,6 +150,28 @@ COPY o-voxel ./o-voxel
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<'EOF'
 set -eux
 python -m pip install ./o-voxel --no-build-isolation --no-deps
+EOF
+
+
+FROM builder AS attention-extras
+
+ARG ATTN_BACKEND
+ARG SPARSE_ATTN_BACKEND
+ARG SAGEATTENTION_PACKAGE
+ARG SAGEATTENTION_EXT_PARALLEL
+ARG SAGEATTENTION_NVCC_THREADS
+
+# Keep optional attention experiments after the expensive CUDA extension layers
+# so changing ATTN_BACKEND does not rebuild nvdiffrast/CuMesh/FlexGEMM/O-Voxel.
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked <<EOF
+set -eux
+if [ "${ATTN_BACKEND}" = "sage" ] || [ "${SPARSE_ATTN_BACKEND}" = "sage" ]; then
+    EXT_PARALLEL="${SAGEATTENTION_EXT_PARALLEL}" \
+    NVCC_APPEND_FLAGS="--threads ${SAGEATTENTION_NVCC_THREADS}" \
+    python -m pip install "${SAGEATTENTION_PACKAGE}" --no-build-isolation
+else
+    echo "Skipping SageAttention for ATTN_BACKEND=${ATTN_BACKEND} SPARSE_ATTN_BACKEND=${SPARSE_ATTN_BACKEND}"
+fi
 EOF
 
 
@@ -201,7 +205,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OPENCV_IO_ENABLE_OPENEXR=1 \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     CUDA_MODULE_LOADING=LAZY \
-    ATTN_BACKEND=sage \
+    ATTN_BACKEND=flash_attn \
     SPARSE_ATTN_BACKEND=flash_attn \
     TRELLIS2_FLOW_BLOCK_OFFLOAD=1 \
     TRELLIS2_IMAGE_ENCODER=timm-dinov3 \
@@ -260,7 +264,7 @@ if ! id --user ${APP_USER} >/dev/null 2>&1; then
 fi
 EOF
 
-COPY --from=builder /opt/venv /opt/venv
+COPY --from=attention-extras /opt/venv /opt/venv
 COPY --chown=${APP_UID}:${APP_GID} . /app
 
 RUN <<EOF

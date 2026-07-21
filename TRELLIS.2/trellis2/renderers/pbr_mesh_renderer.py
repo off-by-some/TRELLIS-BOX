@@ -60,6 +60,10 @@ class EnvMap:
             directions.unsqueeze(0),
             boundary_mode='cube',
         )[0]
+
+    def release_backend(self):
+        if hasattr(self, '_nvdiffrec_envlight'):
+            del self._nvdiffrec_envlight
             
 
 def intrinsics_to_projection(
@@ -185,6 +189,35 @@ def gamma_correction(x: torch.Tensor, gamma: float = 2.2) -> torch.Tensor:
     Applies gamma correction to an HDR image tensor.
     """
     return torch.clamp(x ** (1.0 / gamma), 0.0, 1.0)
+
+
+def sample_visible_voxel_attrs(mesh: MeshWithVoxel, xyz: torch.Tensor, mask: torch.Tensor, image_shape: Tuple[int, int], chunk_size: int) -> torch.Tensor:
+    if 'grid_sample_3d' not in globals():
+        from flex_gemm.ops.grid_sample import grid_sample_3d
+
+    height, width = image_shape
+    channels = mesh.attrs.shape[-1]
+    out = torch.zeros((height * width, channels), dtype=mesh.attrs.dtype, device=mesh.attrs.device)
+    active = torch.nonzero(mask.reshape(-1), as_tuple=False).squeeze(1)
+    if active.numel() == 0:
+        return out.reshape(1, height, width, channels)
+
+    xyz_flat = ((xyz - mesh.origin) / mesh.voxel_size).reshape(-1, 3)
+    voxel_coords = torch.cat([torch.zeros_like(mesh.coords[..., :1]), mesh.coords], dim=-1)
+    chunk_size = max(1, int(chunk_size))
+    for start in range(0, active.numel(), chunk_size):
+        idx = active[start:start + chunk_size]
+        sampled = grid_sample_3d(
+            mesh.attrs,
+            voxel_coords,
+            mesh.voxel_shape,
+            xyz_flat.index_select(0, idx).reshape(1, -1, 3).contiguous(),
+            mode='trilinear'
+        ).reshape(-1, channels)
+        out.index_copy_(0, idx, sampled)
+        del sampled, idx
+
+    return out.reshape(1, height, width, channels)
     
 
 class PbrMeshRenderer:
@@ -204,6 +237,7 @@ class PbrMeshRenderer:
             "far": None,
             "ssaa": 1,
             "peel_layers": 8,
+            "voxel_sample_chunk_size": 131072,
         })
         self.rendering_options.update(rendering_options)
         self.glctx = dr.RasterizeCudaContext(device=device)
@@ -322,19 +356,16 @@ class PbrMeshRenderer:
                 
                 # PBR attributes
                 if isinstance(mesh, MeshWithVoxel):
-                    if 'grid_sample_3d' not in globals():
-                        from flex_gemm.ops.grid_sample import grid_sample_3d
                     mask = rast[..., -1:] > 0
                     xyz = dr.interpolate(vertices_orig, rast, faces)[0]
-                    xyz = ((xyz - mesh.origin) / mesh.voxel_size).reshape(1, -1, 3)
-                    img = grid_sample_3d(
-                        mesh.attrs,
-                        torch.cat([torch.zeros_like(mesh.coords[..., :1]), mesh.coords], dim=-1),
-                        mesh.voxel_shape,
+                    img = sample_visible_voxel_attrs(
+                        mesh,
                         xyz,
-                        mode='trilinear'
+                        mask,
+                        (resolution * ssaa, resolution * ssaa),
+                        self.rendering_options["voxel_sample_chunk_size"],
                     )
-                    img = img.reshape(1, resolution * ssaa, resolution * ssaa, mesh.attrs.shape[-1]) * mask
+                    img = img * mask
                     gb_basecolor = img[0, ..., mesh.layout['base_color']]
                     gb_metallic = img[0, ..., mesh.layout['metallic']]
                     gb_roughness = img[0, ..., mesh.layout['roughness']]
@@ -422,10 +453,10 @@ class PbrMeshRenderer:
                                 elif mat.alpha_mode == AlphaMode.BLEND:
                                     gb_alpha += mat.alpha_factor * mat_mask
                 if _ == 0:
-                    out_dict.base_color = gb_basecolor
-                    out_dict.metallic = gb_metallic
-                    out_dict.roughness = gb_roughness
-                    out_dict.alpha = gb_alpha
+                    out_dict.base_color = gb_basecolor.clone()
+                    out_dict.metallic = gb_metallic.clone()
+                    out_dict.roughness = gb_roughness.clone()
+                    out_dict.alpha = gb_alpha.clone()
                     
                 # Shading
                 gb_basecolor = torch.clamp(gb_basecolor, 0.0, 1.0) ** 2.2
@@ -455,6 +486,8 @@ class PbrMeshRenderer:
                     shaded[env_idx] += w * gb_shaded
                     del gb_shaded
                 alpha += w
+                del gb_basecolor, gb_metallic, gb_roughness, gb_alpha, gb_orm, w
+                del gb_depth, gb_normal, gb_cam_normal, pos, mask, rast, rast_db
         
         # Ambient occulusion
         f_occ = screen_space_ambient_occlusion(

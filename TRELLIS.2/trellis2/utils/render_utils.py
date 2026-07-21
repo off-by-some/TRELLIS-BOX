@@ -48,6 +48,7 @@ def get_renderer(sample, **kwargs):
         renderer.rendering_options.far = kwargs.get('far', 100)
         renderer.rendering_options.ssaa = kwargs.get('ssaa', 2)
         renderer.rendering_options.peel_layers = kwargs.get('peel_layers', 8)
+        renderer.rendering_options.voxel_sample_chunk_size = kwargs.get('voxel_sample_chunk_size', 131072)
     elif isinstance(sample, Mesh):
         renderer = MeshRenderer()
         renderer.rendering_options.resolution = kwargs.get('resolution', 512)
@@ -66,6 +67,17 @@ def get_renderer(sample, **kwargs):
     return renderer
 
 
+def release_render_backends(**kwargs):
+    envmap = kwargs.get('envmap')
+    if envmap is None:
+        return
+    envmaps = envmap.values() if isinstance(envmap, dict) else [envmap]
+    for item in envmaps:
+        release_backend = getattr(item, 'release_backend', None)
+        if callable(release_backend):
+            release_backend()
+
+
 def render_frames(sample, extrinsics, intrinsics, options={}, verbose=True, cleanup_between_frames=False, **kwargs):
     renderer = get_renderer(sample, **options)
     rets = {}
@@ -77,7 +89,12 @@ def render_frames(sample, extrinsics, intrinsics, options={}, verbose=True, clea
             rets[k].append(np.clip(v.detach().cpu().numpy().transpose(1, 2, 0) * 255, 0, 255).astype(np.uint8))
         del res
         if cleanup_between_frames:
+            release_render_backends(**kwargs)
             cleanup_memory(synchronize=True)
+    del renderer
+    if cleanup_between_frames:
+        release_render_backends(**kwargs)
+        cleanup_memory(synchronize=True)
     return rets
 
 

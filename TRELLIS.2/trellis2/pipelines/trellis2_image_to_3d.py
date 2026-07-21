@@ -39,6 +39,11 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         'tex_slat_flow_model_1024',
         'tex_slat_decoder',
     ]
+    lazy_model_names = model_names_to_load
+    lazy_model_loading_env = "TRELLIS2_LAZY_LOAD_MODELS"
+    lazy_model_loading_default = True
+    unload_models_after_run_env = "TRELLIS2_UNLOAD_MODELS_AFTER_RUN"
+    unload_models_after_run_default = True
 
     def __init__(
         self,
@@ -172,6 +177,41 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             for key, value in cond.items()
         }
 
+    @classmethod
+    def required_model_names_for_pipeline_type(cls, pipeline_type: str) -> List[str]:
+        common = [
+            'sparse_structure_flow_model',
+            'sparse_structure_decoder',
+            'shape_slat_decoder',
+            'tex_slat_decoder',
+        ]
+        if pipeline_type == '512':
+            return common + [
+                'shape_slat_flow_model_512',
+                'tex_slat_flow_model_512',
+            ]
+        if pipeline_type == '1024':
+            return common + [
+                'shape_slat_flow_model_1024',
+                'tex_slat_flow_model_1024',
+            ]
+        if pipeline_type in {'1024_cascade', '1536_cascade'}:
+            return common + [
+                'shape_slat_flow_model_512',
+                'shape_slat_flow_model_1024',
+                'tex_slat_flow_model_1024',
+            ]
+        raise ValueError(f"Invalid pipeline type: {pipeline_type}")
+
+    def unload_run_models(self, names: Iterable[str]) -> None:
+        if not (
+            getattr(self, '_lazy_model_loading', False)
+            and env_flag(self.unload_models_after_run_env, self.unload_models_after_run_default)
+        ):
+            return
+        self.unload_models(names)
+        cleanup_memory(self.device)
+
     def preprocess_image(self, input: Image.Image) -> Image.Image:
         """
         Preprocess the input image.
@@ -252,7 +292,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             sampler_params (dict): Additional parameters for the sampler.
         """
         # Sample sparse structure latent
-        flow_model = self.models['sparse_structure_flow_model']
+        flow_model = self.ensure_model('sparse_structure_flow_model')
         reso = flow_model.resolution
         in_channels = flow_model.in_channels
         noise = torch.randn(num_samples, in_channels, reso, reso, reso).to(self.device)
@@ -276,7 +316,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         del noise
         
         # Decode sparse structure latent
-        decoder = self.models['sparse_structure_decoder']
+        decoder = self.ensure_model('sparse_structure_decoder')
         if self.low_vram:
             decoder.to(self.device)
         try:
@@ -390,15 +430,16 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         cleanup_memory(self.device)
         
         # Upsample
+        shape_slat_decoder = self.ensure_model('shape_slat_decoder')
         if self.low_vram:
-            self.models['shape_slat_decoder'].to(self.device)
-            self.models['shape_slat_decoder'].low_vram = True
+            shape_slat_decoder.to(self.device)
+            shape_slat_decoder.low_vram = True
         try:
-            hr_coords = self.models['shape_slat_decoder'].upsample(slat, upsample_times=4)
+            hr_coords = shape_slat_decoder.upsample(slat, upsample_times=4)
         finally:
             if self.low_vram:
-                self.models['shape_slat_decoder'].cpu()
-                self.models['shape_slat_decoder'].low_vram = False
+                shape_slat_decoder.cpu()
+                shape_slat_decoder.low_vram = False
                 cleanup_memory(self.device)
         hr_resolution = resolution
         while True:
@@ -462,16 +503,17 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             List[Mesh]: The decoded meshes.
             List[SparseTensor]: The decoded substructures.
         """
-        self.models['shape_slat_decoder'].set_resolution(resolution)
+        shape_slat_decoder = self.ensure_model('shape_slat_decoder')
+        shape_slat_decoder.set_resolution(resolution)
         if self.low_vram:
-            self.models['shape_slat_decoder'].to(self.device)
-            self.models['shape_slat_decoder'].low_vram = True
+            shape_slat_decoder.to(self.device)
+            shape_slat_decoder.low_vram = True
         try:
-            ret = self.models['shape_slat_decoder'](slat, return_subs=True)
+            ret = shape_slat_decoder(slat, return_subs=True)
         finally:
             if self.low_vram:
-                self.models['shape_slat_decoder'].cpu()
-                self.models['shape_slat_decoder'].low_vram = False
+                shape_slat_decoder.cpu()
+                shape_slat_decoder.low_vram = False
                 cleanup_memory(self.device)
         return ret
     
@@ -538,13 +580,14 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         Returns:
             SparseTensor: The decoded texture voxels
         """
+        tex_slat_decoder = self.ensure_model('tex_slat_decoder')
         if self.low_vram:
-            self.models['tex_slat_decoder'].to(self.device)
+            tex_slat_decoder.to(self.device)
         try:
-            ret = self.models['tex_slat_decoder'](slat, guide_subs=subs) * 0.5 + 0.5
+            ret = tex_slat_decoder(slat, guide_subs=subs) * 0.5 + 0.5
         finally:
             if self.low_vram:
-                self.models['tex_slat_decoder'].cpu()
+                tex_slat_decoder.cpu()
                 cleanup_memory(self.device)
         return ret
     
@@ -614,91 +657,85 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         """
         # Check pipeline type
         pipeline_type = pipeline_type or self.default_pipeline_type
-        if pipeline_type == '512':
-            assert 'shape_slat_flow_model_512' in self.models, "No 512 resolution shape SLat flow model found."
-            assert 'tex_slat_flow_model_512' in self.models, "No 512 resolution texture SLat flow model found."
-        elif pipeline_type == '1024':
-            assert 'shape_slat_flow_model_1024' in self.models, "No 1024 resolution shape SLat flow model found."
-            assert 'tex_slat_flow_model_1024' in self.models, "No 1024 resolution texture SLat flow model found."
-        elif pipeline_type == '1024_cascade':
-            assert 'shape_slat_flow_model_512' in self.models, "No 512 resolution shape SLat flow model found."
-            assert 'shape_slat_flow_model_1024' in self.models, "No 1024 resolution shape SLat flow model found."
-            assert 'tex_slat_flow_model_1024' in self.models, "No 1024 resolution texture SLat flow model found."
-        elif pipeline_type == '1536_cascade':
-            assert 'shape_slat_flow_model_512' in self.models, "No 512 resolution shape SLat flow model found."
-            assert 'shape_slat_flow_model_1024' in self.models, "No 1024 resolution shape SLat flow model found."
-            assert 'tex_slat_flow_model_1024' in self.models, "No 1024 resolution texture SLat flow model found."
-        else:
-            raise ValueError(f"Invalid pipeline type: {pipeline_type}")
-        
-        if preprocess_image:
-            image = self.preprocess_image(image)
-        torch.manual_seed(seed)
-        cond_512 = self.get_cond([image], 512)
-        if self.low_vram:
-            cond_512 = self._cond_to_device(cond_512, torch.device("cpu"))
+        if pipeline_type in {'1024_cascade', '1536_cascade'}:
+            print(
+                f"[startup] Using {pipeline_type}: loading 512 coarse shape and high-resolution refinement models.",
+                flush=True,
+            )
+        required_model_names = self.required_model_names_for_pipeline_type(pipeline_type)
+        self.ensure_models(required_model_names)
+
+        try:
+            if preprocess_image:
+                image = self.preprocess_image(image)
+            torch.manual_seed(seed)
+            cond_512 = self.get_cond([image], 512)
+            if self.low_vram:
+                cond_512 = self._cond_to_device(cond_512, torch.device("cpu"))
+                cleanup_memory(self.device)
+            cond_1024 = self.get_cond([image], 1024) if pipeline_type != '512' else None
+            if self.low_vram and cond_1024 is not None:
+                cond_1024 = self._cond_to_device(cond_1024, torch.device("cpu"))
+                cleanup_memory(self.device)
+            ss_res = {'512': 32, '1024': 64, '1024_cascade': 32, '1536_cascade': 32}[pipeline_type]
+            coords = self.sample_sparse_structure(
+                cond_512, ss_res,
+                num_samples, sparse_structure_sampler_params
+            )
+            if pipeline_type == '512':
+                shape_slat = self.sample_shape_slat(
+                    cond_512, self.ensure_model('shape_slat_flow_model_512'),
+                    coords, shape_slat_sampler_params
+                )
+                tex_slat = self.sample_tex_slat(
+                    cond_512, self.ensure_model('tex_slat_flow_model_512'),
+                    shape_slat, tex_slat_sampler_params
+                )
+                res = 512
+            elif pipeline_type == '1024':
+                shape_slat = self.sample_shape_slat(
+                    cond_1024, self.ensure_model('shape_slat_flow_model_1024'),
+                    coords, shape_slat_sampler_params
+                )
+                tex_slat = self.sample_tex_slat(
+                    cond_1024, self.ensure_model('tex_slat_flow_model_1024'),
+                    shape_slat, tex_slat_sampler_params
+                )
+                res = 1024
+            elif pipeline_type == '1024_cascade':
+                shape_slat, res = self.sample_shape_slat_cascade(
+                    cond_512, cond_1024,
+                    self.ensure_model('shape_slat_flow_model_512'), self.ensure_model('shape_slat_flow_model_1024'),
+                    512, 1024,
+                    coords, shape_slat_sampler_params,
+                    max_num_tokens
+                )
+                tex_slat = self.sample_tex_slat(
+                    cond_1024, self.ensure_model('tex_slat_flow_model_1024'),
+                    shape_slat, tex_slat_sampler_params
+                )
+            elif pipeline_type == '1536_cascade':
+                shape_slat, res = self.sample_shape_slat_cascade(
+                    cond_512, cond_1024,
+                    self.ensure_model('shape_slat_flow_model_512'), self.ensure_model('shape_slat_flow_model_1024'),
+                    512, 1536,
+                    coords, shape_slat_sampler_params,
+                    max_num_tokens
+                )
+                tex_slat = self.sample_tex_slat(
+                    cond_1024, self.ensure_model('tex_slat_flow_model_1024'),
+                    shape_slat, tex_slat_sampler_params
+                )
+            del coords, cond_512
+            if cond_1024 is not None:
+                del cond_1024
             cleanup_memory(self.device)
-        cond_1024 = self.get_cond([image], 1024) if pipeline_type != '512' else None
-        if self.low_vram and cond_1024 is not None:
-            cond_1024 = self._cond_to_device(cond_1024, torch.device("cpu"))
-            cleanup_memory(self.device)
-        ss_res = {'512': 32, '1024': 64, '1024_cascade': 32, '1536_cascade': 32}[pipeline_type]
-        coords = self.sample_sparse_structure(
-            cond_512, ss_res,
-            num_samples, sparse_structure_sampler_params
-        )
-        if pipeline_type == '512':
-            shape_slat = self.sample_shape_slat(
-                cond_512, self.models['shape_slat_flow_model_512'],
-                coords, shape_slat_sampler_params
-            )
-            tex_slat = self.sample_tex_slat(
-                cond_512, self.models['tex_slat_flow_model_512'],
-                shape_slat, tex_slat_sampler_params
-            )
-            res = 512
-        elif pipeline_type == '1024':
-            shape_slat = self.sample_shape_slat(
-                cond_1024, self.models['shape_slat_flow_model_1024'],
-                coords, shape_slat_sampler_params
-            )
-            tex_slat = self.sample_tex_slat(
-                cond_1024, self.models['tex_slat_flow_model_1024'],
-                shape_slat, tex_slat_sampler_params
-            )
-            res = 1024
-        elif pipeline_type == '1024_cascade':
-            shape_slat, res = self.sample_shape_slat_cascade(
-                cond_512, cond_1024,
-                self.models['shape_slat_flow_model_512'], self.models['shape_slat_flow_model_1024'],
-                512, 1024,
-                coords, shape_slat_sampler_params,
-                max_num_tokens
-            )
-            tex_slat = self.sample_tex_slat(
-                cond_1024, self.models['tex_slat_flow_model_1024'],
-                shape_slat, tex_slat_sampler_params
-            )
-        elif pipeline_type == '1536_cascade':
-            shape_slat, res = self.sample_shape_slat_cascade(
-                cond_512, cond_1024,
-                self.models['shape_slat_flow_model_512'], self.models['shape_slat_flow_model_1024'],
-                512, 1536,
-                coords, shape_slat_sampler_params,
-                max_num_tokens
-            )
-            tex_slat = self.sample_tex_slat(
-                cond_1024, self.models['tex_slat_flow_model_1024'],
-                shape_slat, tex_slat_sampler_params
-            )
-        del coords, cond_512
-        if cond_1024 is not None:
-            del cond_1024
-        cleanup_memory(self.device)
-        out_mesh = self.decode_latent(shape_slat, tex_slat, res)
-        if return_latent:
-            return out_mesh, (shape_slat, tex_slat, res)
-        else:
-            del shape_slat, tex_slat
-            cleanup_memory(self.device)
-            return out_mesh
+            out_mesh = self.decode_latent(shape_slat, tex_slat, res)
+            if return_latent:
+                return out_mesh, (shape_slat, tex_slat, res)
+            else:
+                del shape_slat, tex_slat
+                cleanup_memory(self.device)
+                return out_mesh
+        finally:
+            self.unload_run_models(required_model_names)

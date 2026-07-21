@@ -1,6 +1,7 @@
 from typing import *
 import os
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 from transformers import DINOv3ViTModel
@@ -249,6 +250,8 @@ class TimmDinoV3FeatureExtractor:
         )
         if truncate_rope_periods and hasattr(self.model, "rope"):
             self.model.rope.periods = self.model.rope.periods.to(torch.bfloat16).to(torch.float32)
+        if hasattr(self.model, "norm"):
+            self.model.norm = nn.Identity()
         self.model.eval()
         self.transform = transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
@@ -271,7 +274,44 @@ class TimmDinoV3FeatureExtractor:
     def device(self):
         return next(self.model.parameters()).device
 
-    @torch.no_grad()
+    @torch.inference_mode()
+    def extract_features(self, image: torch.Tensor) -> torch.Tensor:
+        param = next(self.model.parameters())
+        image = image.to(device=param.device, dtype=param.dtype)
+        features = self.model.forward_features(image)
+        if isinstance(features, dict):
+            features = features.get("x")
+            if features is None:
+                features = features.get("last_hidden_state")
+        if not isinstance(features, torch.Tensor):
+            raise RuntimeError(f"Unexpected DINOv3 feature output type: {type(features)}")
+
+        features = F.layer_norm(features, features.shape[-1:])
+        expected_tokens = (self.image_size // 16) ** 2 + 5
+        expected_width = 1024
+        if features.shape[1:] != (expected_tokens, expected_width):
+            raise RuntimeError(
+                "Unexpected DINOv3 conditioning shape: "
+                f"{tuple(features.shape)}; expected [B, {expected_tokens}, {expected_width}]"
+            )
+        if not torch.isfinite(features).all():
+            raise RuntimeError("DINOv3 conditioning contains NaN or Inf values")
+        if env_flag("TRELLIS2_DINOV3_TELEMETRY", False):
+            self.log_feature_telemetry(features)
+        return features
+
+    @staticmethod
+    def log_feature_telemetry(features: torch.Tensor) -> None:
+        f = features.float()
+        print("[DINOv3] shape:", tuple(f.shape), flush=True)
+        print("[DINOv3] global mean:", f.mean().item(), flush=True)
+        print("[DINOv3] global std:", f.std().item(), flush=True)
+        print("[DINOv3] token mean abs:", f.mean(dim=-1).abs().mean().item(), flush=True)
+        print("[DINOv3] token std:", f.std(dim=-1).mean().item(), flush=True)
+        print("[DINOv3] token norm:", f.norm(dim=-1).mean().item(), flush=True)
+        print("[DINOv3] finite:", torch.isfinite(f).all().item(), flush=True)
+
+    @torch.inference_mode()
     def __call__(self, image: Union[torch.Tensor, List[Image.Image]]) -> torch.Tensor:
         if isinstance(image, list):
             assert all(isinstance(i, Image.Image) for i in image), "Image list should be list of PIL images"
@@ -284,15 +324,5 @@ class TimmDinoV3FeatureExtractor:
         else:
             raise ValueError(f"Unsupported type of image: {type(image)}")
 
-        dtype = next(self.model.parameters()).dtype
-        image = self.transform(image).to(device=self.device, dtype=dtype)
-        features = self.model.forward_features(image)
-        if isinstance(features, dict):
-            features = features.get("x")
-            if features is None:
-                features = features.get("last_hidden_state")
-        if not isinstance(features, torch.Tensor):
-            raise RuntimeError(f"Unexpected DINOv3 feature output type: {type(features)}")
-        if features.ndim != 3 or features.shape[-1] != 1024:
-            raise RuntimeError(f"Unexpected DINOv3 feature shape: {tuple(features.shape)}")
-        return features
+        image = self.transform(image)
+        return self.extract_features(image)
