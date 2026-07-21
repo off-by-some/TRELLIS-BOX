@@ -6,7 +6,7 @@
 <a href="https://github.com/microsoft/TRELLIS"><img src='https://img.shields.io/badge/TRELLIS-3D_Generation-blue?logo=github&logoColor=white' alt='TRELLIS'></a>
 <a href="https://hub.docker.com/r/cassidybridges/trellis-box"><img src='https://img.shields.io/docker/pulls/cassidybridges/trellis-box?logo=docker&logoColor=white' alt='Docker Pulls'></a>
 <a href="https://pytorch.org"><img src='https://img.shields.io/badge/PyTorch-2.4+-red?logo=pytorch&logoColor=white' alt='PyTorch'></a>
-<a href="#requirements"><img src='https://img.shields.io/badge/GPU-8GB+-green?logo=nvidia&logoColor=white' alt='GPU Required'></a>
+<a href="#requirements"><img src='https://img.shields.io/badge/GPU-12GB_VRAM-green?logo=nvidia&logoColor=white' alt='GPU Required'></a>
 <a href="https://github.com/off-by-some/TRELLIS-BOX/blob/main/LICENSE"><img src='https://img.shields.io/badge/License-MIT-yellow' alt='MIT License'></a>
 </p>
 
@@ -98,7 +98,7 @@ Rapidly prototype 3D concepts from sketches or reference images. The FP16 optimi
 
 ### Prerequisites
 - **Docker**: Install Docker Engine with NVIDIA Container Toolkit support
-- **GPU**: NVIDIA GPU with at least 8GB VRAM (recommended: 16GB+)
+- **GPU**: NVIDIA GPU with 12 GB VRAM
 - **Platform**: Linux, macOS, or Windows with Docker Desktop
 - **Storage**: ~20GB free space for models and Docker layers
 - **Nvidia GPU**: Pull requests welcome for additional GPU support!

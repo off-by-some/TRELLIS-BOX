@@ -110,7 +110,10 @@ class Trellis2ImageTo3DPipeline(Pipeline):
 
         image_cond_model_config = image_feature_extractor.resolve_image_cond_model_config(args['image_cond_model'])
         pipeline.image_cond_model = getattr(image_feature_extractor, image_cond_model_config['name'])(**image_cond_model_config['args'])
-        pipeline.rembg_model = getattr(rembg, args['rembg_model']['name'])(**args['rembg_model']['args'])
+        rembg_args = args.get('rembg_model', {}).get('args', {})
+        pipeline.rembg_model = rembg.create_rembg_model(
+            rembg_args.get('model_name', 'ZhengPeng7/BiRefNet')
+        )
         
         pipeline.low_vram = args.get('low_vram', True)
         pipeline.flow_block_offload = env_flag("TRELLIS2_FLOW_BLOCK_OFFLOAD", True)
@@ -230,6 +233,12 @@ class Trellis2ImageTo3DPipeline(Pipeline):
             output = input
         else:
             input = input.convert('RGB')
+            if self.rembg_model is None:
+                raise ValueError(
+                    "Background removal is disabled. Upload an RGBA image "
+                    "with a non-opaque alpha channel, or set "
+                    "TRELLIS2_REMBG_BACKEND=auto."
+                )
             if self.low_vram:
                 self.rembg_model.to(self.device)
             output = self.rembg_model(input)
@@ -239,6 +248,11 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         output_np = np.array(output)
         alpha = output_np[:, :, 3]
         bbox = np.argwhere(alpha > 0.8 * 255)
+        if bbox.size == 0:
+            raise ValueError(
+                "Background removal produced an empty alpha mask. Try an image "
+                "with a clearer foreground, or upload an RGBA image with alpha."
+            )
         bbox = np.min(bbox[:, 1]), np.min(bbox[:, 0]), np.max(bbox[:, 1]), np.max(bbox[:, 0])
         center = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
         size = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
@@ -591,7 +605,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
                 cleanup_memory(self.device)
         return ret
     
-    @torch.no_grad()
+    @torch.inference_mode()
     def decode_latent(
         self,
         shape_slat: SparseTensor,
@@ -626,7 +640,7 @@ class Trellis2ImageTo3DPipeline(Pipeline):
         cleanup_memory(self.device)
         return out_mesh
     
-    @torch.no_grad()
+    @torch.inference_mode()
     def run(
         self,
         image: Image.Image,

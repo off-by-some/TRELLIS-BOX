@@ -84,14 +84,16 @@ docker run --rm --gpus all \
 
 The Triton cache mount avoids recompiling runtime kernels every time the container starts.
 The container fixes ownership on mounted cache/output directories before it drops to the non-root app user.
-Dense attention uses SageAttention on supported GPUs; packed varlen sparse attention uses FlashAttention by default.
+Dense and packed varlen sparse attention use FlashAttention by default while quality is being validated.
 The Dockerfile installs SageAttention when either configured attention backend is `sage`. It uses `sageattention==1.0.6` because that is the version currently published on PyPI; override `SAGEATTENTION_PACKAGE` if you want to test a source/GitHub build.
 
-TRELLIS.2 uses the public timm DINOv3 ViT-L/16 conversion by default: `hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m`. The checkpoint downloads at runtime into the mounted Hugging Face cache, not during Docker build, and retains the DINOv3 license. To use the original gated Transformers checkpoint instead, set `TRELLIS2_IMAGE_ENCODER=meta-dinov3`, open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell. If background removal fails with a 403, also accept/request access for https://huggingface.co/briaai/RMBG-2.0 and review BRIA's RMBG-2.0 license terms.
+TRELLIS.2 uses the public timm DINOv3 ViT-L/16 conversion by default: `hf_hub:timm/vit_large_patch16_dinov3_qkvb.lvd1689m`. The checkpoint downloads at runtime into the mounted Hugging Face cache, not during Docker build, and retains the DINOv3 license. Background removal is also ungated by default: existing alpha is reused, otherwise `ZhengPeng7/BiRefNet` is loaded at revision `e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4`.
+
+Optional gated backends still work. To use the original gated Transformers DINOv3 checkpoint, set `TRELLIS2_IMAGE_ENCODER=meta-dinov3`, open https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m, accept the license/request access, then either run `huggingface-cli login` locally before starting the container or export `HF_TOKEN=hf_your_token_here` in your shell. To use Bria background removal, set `TRELLIS2_REMBG_BACKEND=bria`, accept/request access for https://huggingface.co/briaai/RMBG-2.0, and review BRIA's RMBG-2.0 license terms.
 
 ### Prerequisites
 - **System**: The code is currently tested only on **Linux**.
-- **Hardware**: An NVIDIA GPU with at least 24GB of memory is necessary. The code has been verified on NVIDIA A100 and H100 GPUs.  
+- **Hardware**: An NVIDIA GPU with 12 GB VRAM. This container is tuned for 12 GB until broader benchmarking is complete.  
 - **Software**:   
   - The [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit-archive) is needed to compile certain packages. Recommended version is 12.4.  
   - [Conda](https://docs.anaconda.com/miniconda/install/#quick-command-line-install) is recommended for managing dependencies.  

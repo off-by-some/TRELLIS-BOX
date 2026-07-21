@@ -34,6 +34,12 @@ warnings.filterwarnings(
     category=UserWarning,
     module=r"torch\.nn\.functional",
 )
+warnings.filterwarnings(
+    "ignore",
+    message=r"Using torch\.cross without specifying the dim arg is deprecated.*",
+    category=UserWarning,
+    module=r"cumesh\.remeshing",
+)
 
 MAX_SEED = np.iinfo(np.int32).max
 TMP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tmp')
@@ -358,9 +364,58 @@ def image_to_base64(image):
     return f"data:image/jpeg;base64,{img_str}"
 
 
-def start_session(req: gr.Request):
+def session_dir(req: gr.Request) -> str:
     user_dir = os.path.join(TMP_DIR, str(req.session_hash))
     os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
+
+def cache_mesh_for_export(mesh, res: int, req: gr.Request) -> str:
+    mesh_path = os.path.join(session_dir(req), "latest_mesh.pt")
+    torch.save(
+        {
+            "vertices": mesh.vertices.detach().cpu(),
+            "faces": mesh.faces.detach().cpu(),
+            "attrs": mesh.attrs.detach().cpu(),
+            "coords": mesh.coords.detach().cpu(),
+            "res": res,
+        },
+        mesh_path,
+    )
+    return mesh_path
+
+
+def load_cached_mesh_for_export_path(mesh_path: Optional[str]) -> Optional[dict]:
+    if not mesh_path or not os.path.exists(mesh_path):
+        return None
+    return torch.load(mesh_path, map_location=pipeline.device)
+
+
+def release_envmaps_to_cpu() -> None:
+    for item in envmap.values():
+        item.release_backend()
+        item.image = item.image.cpu()
+
+
+def ensure_envmaps_on_cuda() -> None:
+    for item in envmap.values():
+        item.image = item.image.cuda()
+
+
+def prepare_for_glb_export() -> None:
+    startup("Freeing generation and preview memory before GLB export.")
+    if hasattr(pipeline, "models"):
+        pipeline.unload_models(list(pipeline.models.keys()))
+    if getattr(pipeline, "image_cond_model", None) is not None:
+        pipeline.image_cond_model.cpu()
+    if getattr(pipeline, "rembg_model", None) is not None:
+        pipeline.rembg_model.cpu()
+    release_envmaps_to_cpu()
+    cleanup_memory(pipeline.device, synchronize=True)
+
+
+def start_session(req: gr.Request):
+    session_dir(req)
     
     
 def end_session(req: gr.Request):
@@ -465,8 +520,10 @@ def image_to_3d(
     del outputs
     mesh.simplify(16777216) # nvdiffrast limit
     cleanup_memory(pipeline.device, synchronize=True)
+    state["mesh_cache_path"] = cache_mesh_for_export(mesh, state["res"], req)
     progress(0.92, desc="Rendering preview")
     with torch.inference_mode():
+        ensure_envmaps_on_cuda()
         images = render_utils.render_snapshot(
             mesh,
             resolution=1024,
@@ -578,31 +635,63 @@ def extract_glb(
     if not state:
         raise gr.Error("Generate a 3D asset before extracting a GLB.")
 
-    user_dir = os.path.join(TMP_DIR, str(req.session_hash))
-    shape_slat, tex_slat, res = unpack_state(state)
-    mesh = pipeline.decode_latent(shape_slat, tex_slat, res)[0]
-    glb = o_voxel.postprocess.to_glb(
-        vertices=mesh.vertices,
-        faces=mesh.faces,
-        attr_volume=mesh.attrs,
-        coords=mesh.coords,
-        attr_layout=pipeline.pbr_attr_layout,
-        grid_size=res,
-        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        decimation_target=decimation_target,
-        texture_size=texture_size,
-        remesh=True,
-        remesh_band=1,
-        remesh_project=0,
-        use_tqdm=True,
-    )
-    now = datetime.now()
-    timestamp = now.strftime("%Y-%m-%dT%H%M%S") + f".{now.microsecond // 1000:03d}"
-    os.makedirs(user_dir, exist_ok=True)
-    glb_path = os.path.join(user_dir, f'sample_{timestamp}.glb')
-    glb.export(glb_path, extension_webp=True)
-    del shape_slat, tex_slat, mesh, glb
-    cleanup_memory(pipeline.device)
+    user_dir = session_dir(req)
+    shape_slat = None
+    tex_slat = None
+    mesh = None
+    cached_mesh = None
+    vertices = None
+    faces = None
+    attr_volume = None
+    coords = None
+    glb = None
+    glb_path = None
+    mesh_cache_path = state.get("mesh_cache_path")
+    if not mesh_cache_path or not os.path.exists(mesh_cache_path):
+        shape_slat, tex_slat, res = unpack_state(state)
+        mesh = pipeline.decode_latent(shape_slat, tex_slat, res)[0]
+        mesh_cache_path = cache_mesh_for_export(mesh, res, req)
+        del shape_slat, tex_slat, mesh
+        shape_slat = None
+        tex_slat = None
+        mesh = None
+        cleanup_memory(pipeline.device, synchronize=True)
+
+    prepare_for_glb_export()
+    cached_mesh = load_cached_mesh_for_export_path(mesh_cache_path)
+    if cached_mesh is None:
+        raise gr.Error("Generated mesh cache is missing. Generate the asset again before exporting.")
+    try:
+        res = cached_mesh["res"]
+        vertices = cached_mesh["vertices"]
+        faces = cached_mesh["faces"]
+        attr_volume = cached_mesh["attrs"]
+        coords = cached_mesh["coords"]
+        glb = o_voxel.postprocess.to_glb(
+            vertices=vertices,
+            faces=faces,
+            attr_volume=attr_volume,
+            coords=coords,
+            attr_layout=pipeline.pbr_attr_layout,
+            grid_size=res,
+            aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+            decimation_target=decimation_target,
+            texture_size=texture_size,
+            remesh=True,
+            remesh_band=1,
+            remesh_project=0,
+            use_tqdm=True,
+        )
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%dT%H%M%S") + f".{now.microsecond // 1000:03d}"
+        os.makedirs(user_dir, exist_ok=True)
+        glb_path = os.path.join(user_dir, f'sample_{timestamp}.glb')
+        glb.export(glb_path, extension_webp=True)
+    finally:
+        del shape_slat, tex_slat, mesh, cached_mesh, vertices, faces, attr_volume, coords, glb
+        cleanup_memory(pipeline.device, synchronize=True)
+    if glb_path is None:
+        raise gr.Error("GLB export did not produce a file.")
     return glb_path, glb_path
 
 
